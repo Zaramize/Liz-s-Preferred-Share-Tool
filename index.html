@@ -171,6 +171,7 @@
       <div class="tab active" data-tab="manual">Manual entry</div>
       <div class="tab" data-tab="search">Look up ticker / issuer</div>
       <div class="tab" data-tab="pdf">Upload prospectus PDF</div>
+      <div class="tab" data-tab="import">Import script results</div>
     </div>
 
     <div id="tab-manual">
@@ -202,6 +203,14 @@
       <div class="form-row"><label></label><button class="primary" id="p_go">Extract terms from PDF</button></div>
       <div id="p_status" class="loading-txt"></div>
       <div class="src-note" style="margin-top:6px;">Reads the uploaded prospectus directly and pulls terms into the manual entry tab for you to review before saving — no web search involved, so this is the most reliable source when you have the document in hand.</div>
+    </div>
+
+    <div id="tab-import" style="display:none;">
+      <div class="form-row"><label>Results JSON</label><input type="file" id="i_file" accept="application/json"></div>
+      <div class="form-row"><label></label><button class="primary" id="i_go">Load results</button></div>
+      <div id="i_status" class="loading-txt"></div>
+      <div class="src-note" style="margin-top:6px;">Reads the <code>preferred_terms_summary.json</code> file produced by the extractor.py script (run locally against SEDAR+ or manually-downloaded prospectus PDFs). Each entry shows up below for review — click to add to the watchlist.</div>
+      <div class="searchresults" id="i_results" style="margin-top:12px;"></div>
     </div>
 
     <div id="tab-search" style="display:none;">
@@ -544,6 +553,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.getElementById('tab-manual').style.display = t.dataset.tab==='manual' ? 'block':'none';
     document.getElementById('tab-search').style.display = t.dataset.tab==='search' ? 'block':'none';
     document.getElementById('tab-pdf').style.display = t.dataset.tab==='pdf' ? 'block':'none';
+    document.getElementById('tab-import').style.display = t.dataset.tab==='import' ? 'block':'none';
   };
 });
 let pendingSource = { url:null, name:null };
@@ -781,6 +791,104 @@ document.getElementById('p_go').onclick = async ()=>{
     statusEl.textContent = 'Extracted — switched to manual entry for you to review before saving.';
   }catch(e){
     statusEl.textContent = 'Could not extract terms from that PDF — make sure it\'s text-based (not a scanned image), or enter terms manually.';
+  }
+};
+
+// ---------- import from extractor.py JSON output ----------
+function readFileAsText(file){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve(r.result);
+    r.onerror = ()=> reject(new Error('file read failed'));
+    r.readAsText(file);
+  });
+}
+
+function toIsoDate(raw){
+  if(!raw) return null;
+  const d = new Date(raw);
+  if(isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0,10);
+}
+
+function mapStructureType(t){
+  if(t==='rate-reset') return 'reset';
+  if(t==='floating') return 'floating';
+  if(t==='perpetual') return 'perpetual';
+  return 'reset'; // default assumption when script couldn't confidently classify
+}
+
+function renderImportCard(item){
+  const div = document.createElement('div');
+  div.className='lres-card';
+  const isoDate = toIsoDate(item.first_reset_date);
+  const rateStr = item.initial_annual_rate_pct!=null ? item.initial_annual_rate_pct+'%' : '—';
+  const notes = item.extraction_notes && item.extraction_notes.length
+    ? item.extraction_notes.join(' ')
+    : 'No extraction caveats — all fields matched cleanly.';
+  const missing = !item.ticker || item.initial_annual_rate_pct==null;
+
+  div.innerHTML = `
+    <div>
+      <div class="lres-ticker">${item.ticker || '(ticker not found — fill in manually after adding)'}</div>
+      <div class="lres-desc">${item.issuer||''}${item.series?' — '+item.series:''}</div>
+      <div class="lres-meta">
+        <div class="m"><span class="ml">Rate</span>${rateStr}</div>
+        <div class="m"><span class="ml">Spread</span>${item.spread_bps!=null ? (item.spread_bps/100).toFixed(2)+'%' : '—'}</div>
+        <div class="m"><span class="ml">Reset date</span>${item.first_reset_date||'—'}${isoDate && isoDate!==item.first_reset_date ? ' → '+isoDate : ''}</div>
+        <div class="m"><span class="ml">Cumulative</span>${item.cumulative===false?'No':item.cumulative===true?'Yes':'—'}</div>
+      </div>
+      <div class="src-note" style="margin-top:8px; ${missing?'color:var(--amber);':''}">
+        From: ${item.source_file||'unknown file'}<br>${notes}
+      </div>
+    </div>
+    <button>+ Add to watchlist</button>
+  `;
+  div.querySelector('button').onclick = async ()=>{
+    const h = {
+      ticker: item.ticker || ('UNVERIFIED-'+(item.source_file||Math.random().toString(36).slice(2,7))),
+      issuer: item.issuer || '',
+      series: item.series || '',
+      type: mapStructureType(item.structure_type),
+      par: item.par_value || 25.00,
+      currentRate: item.initial_annual_rate_pct || 0,
+      spreadBps: item.spread_bps!=null ? item.spread_bps : null,
+      lastResetDate: null,
+      nextResetDate: isoDate,
+      resetFreqYears: 5,
+      cumulative: item.cumulative!=null ? item.cumulative : true,
+      callable: true,
+      convertsTo: null,
+      termsSourceUrl: null,
+      termsSourceName: 'Extracted locally from PDF: ' + (item.source_file || 'unknown'),
+      price:null, priceSource:null, priceTimestamp:null, manualPrice:null
+    };
+    holdings.push(h);
+    await saveHoldings();
+    renderTable();
+    refreshPrice(h).then(async ()=>{ await saveHoldings(); renderTable(); });
+    const btn = div.querySelector('button');
+    btn.textContent = '✓ Added'; btn.classList.add('added'); btn.disabled = true;
+  };
+  return div;
+}
+
+document.getElementById('i_go').onclick = async ()=>{
+  const fileInput = document.getElementById('i_file');
+  const statusEl = document.getElementById('i_status');
+  const resultsEl = document.getElementById('i_results');
+  const file = fileInput.files[0];
+  if(!file){ statusEl.textContent = 'Choose the preferred_terms_summary.json file first.'; return; }
+  resultsEl.innerHTML = '';
+  try{
+    const text = await readFileAsText(file);
+    const parsed = JSON.parse(text);
+    const list = Array.isArray(parsed) ? parsed : [parsed];
+    if(list.length===0){ statusEl.textContent = 'File loaded but contained no entries.'; return; }
+    statusEl.textContent = list.length + ' extracted result(s) — review before adding (check the amber-flagged ones especially):';
+    list.forEach(item => resultsEl.appendChild(renderImportCard(item)));
+  }catch(e){
+    statusEl.textContent = 'Could not read that file — make sure it\'s the JSON output from extractor.py, not the CSV.';
   }
 };
 
