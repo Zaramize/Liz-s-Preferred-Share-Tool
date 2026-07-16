@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Preferred Share Tracker</title>
+<style>
+  :root{
+    --bg:#0f1318;
+    --panel:#161b22;
+    --panel-2:#1b2129;
+    --border:#2a323d;
+    --text:#e6e9ee;
+    --muted:#8b95a5;
+    --teal:#4fd1ae;
+    --amber:#e8a33d;
+    --red:#e8615a;
+    --mono: "SF Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans); font-size:14px; line-height:1.4;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:28px 20px 80px;}
+  header{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;
+    flex-wrap:wrap; gap:12px;
+  }
+  h1{font-size:20px; margin:0 0 4px; letter-spacing:0.2px; font-weight:600;}
+  .sub{color:var(--muted); font-size:12.5px;}
+  .refnote{
+    font-family:var(--mono); font-size:12.5px; color:var(--muted);
+    text-align:right; line-height:1.6;
+  }
+  .refnote b{color:var(--teal); font-weight:600;}
+  .toolbar{display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap;}
+  button{
+    background:var(--panel-2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; padding:7px 12px; font-size:12.5px; cursor:pointer;
+    font-family:var(--sans); transition:border-color .15s, background .15s;
+  }
+  button:hover{border-color:#3d4757; background:#20262f;}
+  button.primary{background:#1d3b34; border-color:#2f5a4d; color:var(--teal);}
+  button.primary:hover{background:#224539;}
+  button.ghost{background:transparent;}
+  button:disabled{opacity:.45; cursor:default;}
+  .spacer{flex:1;}
+  table{width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+  thead th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em;
+    color:var(--muted); font-weight:600; padding:10px 12px; border-bottom:1px solid var(--border);
+    background:var(--panel-2);
+  }
+  tbody td{padding:11px 12px; border-bottom:1px solid var(--border); font-size:13.5px; vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr{cursor:pointer;}
+  tbody tr:hover{background:#1a2029;}
+  .ticker{font-family:var(--mono); font-weight:600; color:var(--text);}
+  .issuer{color:var(--muted); font-size:12px;}
+  .num{font-family:var(--mono); text-align:right;}
+  .yield-good{color:var(--teal);}
+  .yield-warn{color:var(--amber);}
+  .tag{
+    display:inline-block; font-size:10.5px; padding:2px 6px; border-radius:4px;
+    border:1px solid var(--border); color:var(--muted); font-family:var(--mono);
+  }
+  .tag.reset{color:var(--amber); border-color:#4a3d20;}
+  .tag.float{color:#7fb8e8; border-color:#20384a;}
+  .stale{color:var(--red);}
+  .empty{padding:40px 20px; text-align:center; color:var(--muted);}
+  .empty b{color:var(--text);}
+
+  /* detail panel */
+  .overlay{
+    position:fixed; inset:0; background:rgba(6,8,11,.7); display:none;
+    align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto; z-index:50;
+  }
+  .overlay.open{display:flex;}
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    width:100%; max-width:720px; padding:0; overflow:hidden;
+  }
+  .card-head{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:18px 20px; border-bottom:1px solid var(--border); background:var(--panel-2);
+  }
+  .card-head h2{margin:0; font-size:17px; font-family:var(--mono);}
+  .card-head .series{color:var(--muted); font-size:12.5px; margin-top:3px;}
+  .card-body{padding:18px 20px;}
+  .summary-strip{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+    background:var(--border); border:1px solid var(--border); border-radius:8px; overflow:hidden;
+    margin-bottom:20px;
+  }
+  .sfield{background:var(--panel); padding:12px 14px;}
+  .sfield .lbl{font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:4px;}
+  .sfield .val{font-family:var(--mono); font-size:18px; font-weight:600;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;}
+  .kv{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px;}
+  .kv .k{color:var(--muted);}
+  .kv .v{font-family:var(--mono); text-align:right;}
+  .section-label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:18px 0 8px; font-weight:600;}
+  .override-row{display:flex; gap:8px; align-items:center; margin-top:6px;}
+  input[type=text], input[type=number]{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:7px 10px; font-family:var(--mono); font-size:13px; width:100%;
+  }
+  .close-x{background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; padding:0 4px;}
+  .src-note{font-size:11.5px; color:var(--muted); margin-top:8px;}
+
+  /* add panel */
+  .addpanel{
+    background:var(--panel); border:1px solid var(--border); border-radius:8px;
+    padding:16px 18px; margin-bottom:20px; display:none;
+  }
+  .addpanel.open{display:block;}
+  .tabs{display:flex; gap:4px; margin-bottom:14px;}
+  .tab{padding:6px 12px; font-size:12.5px; border-radius:6px; cursor:pointer; color:var(--muted); border:1px solid transparent;}
+  .tab.active{background:var(--panel-2); color:var(--text); border-color:var(--border);}
+  .form-row{display:grid; grid-template-columns:140px 1fr; gap:10px; align-items:center; margin-bottom:10px;}
+  .form-row label{font-size:12.5px; color:var(--muted);}
+  .searchresults{margin-top:12px; display:flex; flex-direction:column; gap:6px;}
+  .sres-item{
+    display:flex; justify-content:space-between; align-items:center; background:var(--panel-2);
+    border:1px solid var(--border); border-radius:6px; padding:9px 12px; font-size:13px;
+  }
+  .sres-item .l{font-family:var(--mono);}
+  .loading-txt{color:var(--muted); font-size:12.5px; font-style:italic;}
+  .footer-note{color:var(--muted); font-size:11.5px; margin-top:24px; line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Preferred Share Tracker</h1>
+      <div class="sub">Canadian rate-reset &amp; floating preferreds — yield to reset, current yield, yield to worst</div>
+    </div>
+    <div class="refnote">
+      5-yr GoC bond yield: <b id="gocYield">—</b><br>
+      3-mo T-bill: <b id="tbillYield">—</b><br>
+      <span id="refUpdated">rates not yet loaded</span>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <button class="primary" id="refreshAllBtn">↻ Refresh all</button>
+    <button id="addBtn">+ Add holding</button>
+    <span class="spacer"></span>
+    <label style="color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px;">
+      <input type="checkbox" id="autoRefreshToggle" checked style="width:auto;"> Auto-refresh (75s)
+    </label>
+  </div>
+
+  <div class="addpanel" id="addPanel">
+    <div class="tabs">
+      <div class="tab active" data-tab="manual">Manual entry</div>
+      <div class="tab" data-tab="search">Search by issuer</div>
+    </div>
+
+    <div id="tab-manual">
+      <div class="form-row"><label>Ticker</label><input type="text" id="m_ticker" placeholder="e.g. ENB.PF.A"></div>
+      <div class="form-row"><label>Issuer</label><input type="text" id="m_issuer" placeholder="e.g. Enbridge Inc."></div>
+      <div class="form-row"><label>Series / description</label><input type="text" id="m_series" placeholder="e.g. Cumulative Redeemable Preference Shares, Series 9"></div>
+      <div class="form-row"><label>Type</label>
+        <select id="m_type" style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:7px 10px; font-family:var(--mono); font-size:13px;">
+          <option value="reset">Rate reset (5-yr GoC + spread)</option>
+          <option value="floating">Floating (3-mo T-bill + spread)</option>
+          <option value="perpetual">Fixed perpetual</option>
+        </select>
+      </div>
+      <div class="form-row"><label>Par value ($)</label><input type="number" id="m_par" value="25.00" step="0.01"></div>
+      <div class="form-row"><label>Current annual rate (%)</label><input type="number" id="m_rate" step="0.001" placeholder="e.g. 5.672"></div>
+      <div class="form-row"><label>Spread (bps over ref)</label><input type="number" id="m_spread" step="1" placeholder="e.g. 266"></div>
+      <div class="form-row"><label>Next reset / call date</label><input type="text" id="m_resetdate" placeholder="YYYY-MM-DD"></div>
+      <div class="form-row"><label>Cumulative?</label>
+        <select id="m_cumulative" style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:7px 10px; font-family:var(--mono); font-size:13px;">
+          <option value="yes">Yes</option><option value="no">No</option>
+        </select>
+      </div>
+      <div class="form-row"><label></label><button class="primary" id="m_save">Add to watchlist</button></div>
+    </div>
+
+    <div id="tab-search" style="display:none;">
+      <div class="form-row"><label>Issuer name</label><input type="text" id="s_issuer" placeholder="e.g. Royal Bank of Canada"></div>
+      <div class="form-row"><label></label><button class="primary" id="s_go">Search for series</button></div>
+      <div id="s_status" class="loading-txt"></div>
+      <div class="searchresults" id="s_results"></div>
+    </div>
+  </div>
+
+  <table id="watchTable">
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Type</th>
+        <th class="num">Price</th>
+        <th class="num">Current yld</th>
+        <th class="num">Yld to reset</th>
+        <th class="num">Yld to worst</th>
+        <th>Next reset</th>
+      </tr>
+    </thead>
+    <tbody id="watchBody"></tbody>
+  </table>
+  <div class="empty" id="emptyState" style="display:none;">Nothing on the watchlist yet. <b>+ Add holding</b> to get started.</div>
+
+  <div class="footer-note">
+    Prices: attempted via Yahoo Finance first, falling back to a live web search when that's blocked or stale. Reference rates: Bank of Canada Valet API (5-yr benchmark bond yield, 3-mo T-bill).
+    Yield-to-reset assumes the share price converges to par ($25 typical) at the next reset/call date — the standard simplifying assumption for Canadian rate-reset preferreds, not a guarantee the issuer calls it. Always confirm terms against the prospectus before trading.
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="card" id="detailCard"></div>
+</div>
+
+<script>
+const STORE_KEY = 'holdings-v1';
+let holdings = [];
+let refRates = { goc5yr: null, tbill3mo: null, updated: null };
+let autoTimer = null;
+
+// ---------- storage ----------
+async function loadHoldings(){
+  try{
+    const r = await window.storage.get(STORE_KEY, false);
+    holdings = r && r.value ? JSON.parse(r.value) : [];
+  }catch(e){
+    holdings = [];
+  }
+}
+async function saveHoldings(){
+  try{
+    await window.storage.set(STORE_KEY, JSON.stringify(holdings), false);
+  }catch(e){
+    console.error('save failed', e);
+  }
+}
+
+// ---------- seed default ----------
+function seedDefault(){
+  return {
+    ticker:'ENB.PF.A',
+    issuer:'Enbridge Inc.',
+    series:'Cumulative Redeemable Preference Shares, Series 9',
+    type:'reset',
+    cumulative:true,
+    par:25.00,
+    currentRate:5.672,
+    spreadBps:266,
+    lastResetDate:'2024-12-01',
+    nextResetDate:'2029-12-01',
+    resetFreqYears:5,
+    callable:true,
+    convertsTo:'Series 10 (floating, 3-mo T-bill + 2.66%)',
+    price:null,
+    priceSource:null,
+    priceTimestamp:null,
+    manualPrice:null
+  };
+}
+
+// ---------- reference rates: Bank of Canada Valet ----------
+async function fetchRefRates(){
+  try{
+    const r = await fetch('https://www.bankofcanada.ca/valet/observations/BD.CDN.5YR.DQ.YLD/json?recent=1');
+    if(r.ok){
+      const d = await r.json();
+      const obs = d.observations && d.observations[0];
+      if(obs) refRates.goc5yr = parseFloat(obs['BD.CDN.5YR.DQ.YLD'].v);
+    }
+  }catch(e){ /* leave null, UI shows dash */ }
+  try{
+    const r2 = await fetch('https://www.bankofcanada.ca/valet/observations/TB.CDN.3M.DQ.YLD/json?recent=1');
+    if(r2.ok){
+      const d2 = await r2.json();
+      const obs2 = d2.observations && d2.observations[0];
+      if(obs2) refRates.tbill3mo = parseFloat(obs2['TB.CDN.3M.DQ.YLD'].v);
+    }
+  }catch(e){ /* leave null */ }
+  refRates.updated = new Date();
+  renderRefRates();
+}
+function renderRefRates(){
+  document.getElementById('gocYield').textContent = refRates.goc5yr!=null ? refRates.goc5yr.toFixed(3)+'%' : 'unavailable';
+  document.getElementById('tbillYield').textContent = refRates.tbill3mo!=null ? refRates.tbill3mo.toFixed(3)+'%' : 'unavailable';
+  document.getElementById('refUpdated').textContent = refRates.updated ? 'as of '+refRates.updated.toLocaleTimeString() : '';
+}
+
+// ---------- price fetching: Yahoo first, Claude API web-search fallback ----------
+function toYahooSymbol(ticker){
+  // ENB.PF.A -> ENB-PF-A.TO
+  return ticker.replace(/\./g,'-') + '.TO';
+}
+async function fetchPriceYahoo(ticker){
+  const sym = toYahooSymbol(ticker);
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(sym);
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('yahoo http '+r.status);
+  const d = await r.json();
+  const result = d.chart && d.chart.result && d.chart.result[0];
+  const price = result && result.meta && result.meta.regularMarketPrice;
+  if(price == null) throw new Error('no price in yahoo payload');
+  return { price: price, source: 'Yahoo Finance' };
+}
+async function fetchPriceViaSearch(ticker, issuer){
+  const prompt = 'Search the web for the current or most recent closing share price (in CAD) of the TSX-listed security "'+ticker+'"'+(issuer?(' issued by '+issuer):'')+'. Reply with ONLY a JSON object, no markdown, no commentary, in this exact shape: {"price": <number or null>, "asOf": "<date string or null>", "source": "<short source name>"}';
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:1000,
+      messages:[{role:'user', content: prompt}],
+      tools:[{type:'web_search_20250305', name:'web_search'}]
+    })
+  });
+  if(!resp.ok) throw new Error('claude api http '+resp.status);
+  const data = await resp.json();
+  const text = (data.content||[]).map(b=>b.text||'').filter(Boolean).join('\n');
+  const clean = text.replace(/```json|```/g,'').trim();
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if(!jsonMatch) throw new Error('no json in search response');
+  const parsed = JSON.parse(jsonMatch[0]);
+  if(parsed.price == null) throw new Error('search returned no price');
+  return { price: parseFloat(parsed.price), source: parsed.source || 'web search', asOf: parsed.asOf };
+}
+async function refreshPrice(h){
+  try{
+    const y = await fetchPriceYahoo(h.ticker);
+    h.price = y.price;
+    h.priceSource = y.source;
+    h.priceTimestamp = new Date().toISOString();
+    return;
+  }catch(e){ /* fall through */ }
+  try{
+    const s = await fetchPriceViaSearch(h.ticker, h.issuer);
+    h.price = s.price;
+    h.priceSource = s.source + (s.asOf ? ' ('+s.asOf+')' : '');
+    h.priceTimestamp = new Date().toISOString();
+    return;
+  }catch(e){
+    h.priceSource = 'refresh failed — enter manually';
+  }
+}
+
+// ---------- yield math ----------
+function daysBetween(a,b){ return (b-a)/86400000; }
+function quartersBetween(a,b){ return daysBetween(a,b)/91.3; }
+
+function currentYield(h, price){
+  const annualDiv = h.par * (h.currentRate/100);
+  return (annualDiv/price)*100;
+}
+
+// IRR via bisection: cashflow = -price now, then quarterly coupon for n quarters, plus par at final quarter
+function yieldToReset(h, price){
+  if(!h.nextResetDate) return null;
+  const now = new Date();
+  const reset = new Date(h.nextResetDate+'T00:00:00');
+  if(reset <= now) return null;
+  const n = Math.max(1, Math.round(quartersBetween(now, reset)));
+  const q = h.par*(h.currentRate/100)/4; // quarterly coupon
+
+  function npv(rQuarterly){
+    let v = -price;
+    for(let t=1;t<=n;t++){
+      let cf = q;
+      if(t===n) cf += h.par;
+      v += cf/Math.pow(1+rQuarterly, t);
+    }
+    return v;
+  }
+  let lo=-0.5, hi=1.0, mid;
+  // ensure sign change
+  if(npv(lo)*npv(hi) > 0) return null;
+  for(let i=0;i<80;i++){
+    mid = (lo+hi)/2;
+    const v = npv(mid);
+    if(Math.abs(v) < 1e-7) break;
+    if((npv(lo) * v) < 0) hi = mid; else lo = mid;
+  }
+  const annualized = (Math.pow(1+mid,4)-1)*100;
+  return annualized;
+}
+
+function computeYields(h){
+  const price = h.manualPrice != null ? h.manualPrice : h.price;
+  if(price == null || price <= 0) return { cy:null, ytr:null, ytw:null };
+  const cy = currentYield(h, price);
+  const ytr = yieldToReset(h, price);
+  let ytw = cy;
+  if(ytr != null) ytw = Math.min(cy, ytr);
+  return { cy, ytr, ytw };
+}
+
+// ---------- rendering ----------
+function fmtPct(v){ return v==null ? '—' : v.toFixed(2)+'%'; }
+function fmtPrice(v){ return v==null ? '—' : '$'+v.toFixed(2); }
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr+'T00:00:00');
+  return Math.round(daysBetween(new Date(), d));
+}
+
+function renderTable(){
+  const body = document.getElementById('watchBody');
+  const empty = document.getElementById('emptyState');
+  body.innerHTML='';
+  if(holdings.length===0){ empty.style.display='block'; document.getElementById('watchTable').style.display='none'; return; }
+  empty.style.display='none'; document.getElementById('watchTable').style.display='table';
+
+  holdings.forEach((h, idx)=>{
+    const {cy, ytr, ytw} = computeYields(h);
+    const price = h.manualPrice != null ? h.manualPrice : h.price;
+    const tr = document.createElement('tr');
+    tr.onclick = ()=>openDetail(idx);
+    const typeTag = h.type==='reset' ? '<span class="tag reset">RESET</span>'
+                  : h.type==='floating' ? '<span class="tag float">FLOAT</span>'
+                  : '<span class="tag">PERP</span>';
+    const dleft = daysUntil(h.nextResetDate);
+    tr.innerHTML = `
+      <td><div class="ticker">${h.ticker}</div><div class="issuer">${h.issuer||''}</div></td>
+      <td>${typeTag}</td>
+      <td class="num">${fmtPrice(price)}</td>
+      <td class="num">${fmtPct(cy)}</td>
+      <td class="num">${fmtPct(ytr)}</td>
+      <td class="num ${ytw!=null && cy!=null && ytw<cy ? 'yield-warn':'yield-good'}">${fmtPct(ytw)}</td>
+      <td>${h.nextResetDate||'—'}${dleft!=null?`<div class="issuer">${dleft} days</div>`:''}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function openDetail(idx){
+  const h = holdings[idx];
+  const {cy, ytr, ytw} = computeYields(h);
+  const price = h.manualPrice != null ? h.manualPrice : h.price;
+  const card = document.getElementById('detailCard');
+  card.innerHTML = `
+    <div class="card-head">
+      <div>
+        <h2>${h.ticker}</h2>
+        <div class="series">${h.issuer||''} — ${h.series||''}</div>
+      </div>
+      <button class="close-x" id="closeDetail">✕</button>
+    </div>
+    <div class="card-body">
+      <div class="summary-strip">
+        <div class="sfield"><div class="lbl">Price</div><div class="val">${fmtPrice(price)}</div></div>
+        <div class="sfield"><div class="lbl">Current yield</div><div class="val">${fmtPct(cy)}</div></div>
+        <div class="sfield"><div class="lbl">Yield to reset</div><div class="val">${fmtPct(ytr)}</div></div>
+        <div class="sfield"><div class="lbl">Yield to worst</div><div class="val">${fmtPct(ytw)}</div></div>
+      </div>
+
+      <div class="section-label">Terms</div>
+      <div class="grid2">
+        <div>
+          <div class="kv"><span class="k">Par value</span><span class="v">$${h.par.toFixed(2)}</span></div>
+          <div class="kv"><span class="k">Current annual rate</span><span class="v">${h.currentRate}%</span></div>
+          <div class="kv"><span class="k">Structure</span><span class="v">${h.type==='reset'?'5-yr GoC + spread':h.type==='floating'?'3-mo T-bill + spread':'Fixed perpetual'}</span></div>
+          <div class="kv"><span class="k">Spread</span><span class="v">${h.spreadBps!=null? (h.spreadBps/100).toFixed(2)+'%' : '—'}</span></div>
+        </div>
+        <div>
+          <div class="kv"><span class="k">Last reset</span><span class="v">${h.lastResetDate||'—'}</span></div>
+          <div class="kv"><span class="k">Next reset/call</span><span class="v">${h.nextResetDate||'—'}</span></div>
+          <div class="kv"><span class="k">Cumulative</span><span class="v">${h.cumulative?'Yes':'No'}</span></div>
+          <div class="kv"><span class="k">Converts to</span><span class="v">${h.convertsTo||'—'}</span></div>
+        </div>
+      </div>
+
+      <div class="section-label">Price override</div>
+      <div class="override-row">
+        <input type="number" step="0.01" id="manualPriceInput" placeholder="manual price if refresh is off" value="${h.manualPrice!=null?h.manualPrice:''}">
+        <button id="saveManualPrice">Save</button>
+        <button id="clearManualPrice" class="ghost">Use live</button>
+      </div>
+      <div class="src-note">
+        Last price source: ${h.priceSource||'not yet refreshed'} ${h.priceTimestamp? '· '+new Date(h.priceTimestamp).toLocaleString() : ''}
+      </div>
+
+      <div class="section-label">Yield-to-reset assumption</div>
+      <div class="src-note">
+        Calculated as the IRR of buying at the current price, collecting quarterly dividends at the current fixed rate through ${h.nextResetDate||'the next reset date'}, then assuming redemption at par ($${h.par.toFixed(2)}) on that date. This is the standard convention for Canadian rate-reset preferreds — it is not a guarantee Enbridge (or any issuer) will actually call the shares.
+      </div>
+
+      <div style="margin-top:20px; display:flex; gap:8px;">
+        <button id="removeHolding" style="color:var(--red); border-color:#4a2020;">Remove from watchlist</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('closeDetail').onclick = closeDetail;
+  document.getElementById('saveManualPrice').onclick = async ()=>{
+    const v = parseFloat(document.getElementById('manualPriceInput').value);
+    h.manualPrice = isNaN(v) ? null : v;
+    await saveHoldings(); renderTable(); openDetail(idx);
+  };
+  document.getElementById('clearManualPrice').onclick = async ()=>{
+    h.manualPrice = null;
+    await saveHoldings(); renderTable(); openDetail(idx);
+  };
+  document.getElementById('removeHolding').onclick = async ()=>{
+    holdings.splice(idx,1);
+    await saveHoldings(); renderTable(); closeDetail();
+  };
+}
+function closeDetail(){ document.getElementById('overlay').classList.remove('open'); }
+document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeDetail(); });
+
+// ---------- add panel ----------
+document.getElementById('addBtn').onclick = ()=>{
+  document.getElementById('addPanel').classList.toggle('open');
+};
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('tab-manual').style.display = t.dataset.tab==='manual' ? 'block':'none';
+    document.getElementById('tab-search').style.display = t.dataset.tab==='search' ? 'block':'none';
+  };
+});
+document.getElementById('m_save').onclick = async ()=>{
+  const ticker = document.getElementById('m_ticker').value.trim();
+  if(!ticker) return;
+  const h = {
+    ticker,
+    issuer: document.getElementById('m_issuer').value.trim(),
+    series: document.getElementById('m_series').value.trim(),
+    type: document.getElementById('m_type').value,
+    par: parseFloat(document.getElementById('m_par').value) || 25.00,
+    currentRate: parseFloat(document.getElementById('m_rate').value) || 0,
+    spreadBps: parseFloat(document.getElementById('m_spread').value) || null,
+    nextResetDate: document.getElementById('m_resetdate').value.trim() || null,
+    lastResetDate: null,
+    resetFreqYears: 5,
+    cumulative: document.getElementById('m_cumulative').value==='yes',
+    callable: true,
+    convertsTo: null,
+    price:null, priceSource:null, priceTimestamp:null, manualPrice:null
+  };
+  holdings.push(h);
+  await saveHoldings();
+  renderTable();
+  document.getElementById('addPanel').classList.remove('open');
+  refreshPrice(h).then(async ()=>{ await saveHoldings(); renderTable(); });
+};
+
+document.getElementById('s_go').onclick = async ()=>{
+  const issuer = document.getElementById('s_issuer').value.trim();
+  if(!issuer) return;
+  const statusEl = document.getElementById('s_status');
+  const resultsEl = document.getElementById('s_results');
+  statusEl.textContent = 'Searching for outstanding preferred series...';
+  resultsEl.innerHTML='';
+  try{
+    const prompt = 'Search the web for all currently outstanding Canadian preferred share series issued by "'+issuer+'" that trade on the TSX. Reply with ONLY a JSON array, no markdown, no commentary, in this shape: [{"ticker":"XXX.PR.X","series":"short description","type":"reset|floating|perpetual","rate":"e.g. 5.20% or 3-mo T-bill + 2.5%"}]. Include up to 12 series.';
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:1000,
+        messages:[{role:'user', content: prompt}],
+        tools:[{type:'web_search_20250305', name:'web_search'}]
+      })
+    });
+    if(!resp.ok) throw new Error('search failed');
+    const data = await resp.json();
+    const text = (data.content||[]).map(b=>b.text||'').filter(Boolean).join('\n');
+    const clean = text.replace(/```json|```/g,'').trim();
+    const arrMatch = clean.match(/\[[\s\S]*\]/);
+    if(!arrMatch) throw new Error('no series found');
+    const list = JSON.parse(arrMatch[0]);
+    statusEl.textContent = list.length + ' series found — click to add (you\'ll confirm/edit full terms after):';
+    resultsEl.innerHTML='';
+    list.forEach(item=>{
+      const div = document.createElement('div');
+      div.className='sres-item';
+      div.innerHTML = `<span class="l">${item.ticker} — ${item.series||''} (${item.rate||''})</span><button data-t="${item.ticker}">+ Add</button>`;
+      div.querySelector('button').onclick = async ()=>{
+        document.getElementById('m_ticker').value = item.ticker;
+        document.getElementById('m_issuer').value = issuer;
+        document.getElementById('m_series').value = item.series||'';
+        document.getElementById('m_type').value = item.type||'reset';
+        document.querySelector('.tab[data-tab="manual"]').click();
+        statusEl.textContent = 'Loaded into manual entry — confirm par, rate, spread and reset date before saving (double-check against the prospectus).';
+      };
+      resultsEl.appendChild(div);
+    });
+  }catch(e){
+    statusEl.textContent = 'Search failed or returned nothing usable — try adding manually instead.';
+  }
+};
+
+// ---------- refresh orchestration ----------
+async function refreshAll(){
+  const btn = document.getElementById('refreshAllBtn');
+  btn.disabled = true; btn.textContent = 'Refreshing…';
+  await fetchRefRates();
+  for(const h of holdings){
+    await refreshPrice(h);
+  }
+  await saveHoldings();
+  renderTable();
+  btn.disabled = false; btn.textContent = '↻ Refresh all';
+}
+document.getElementById('refreshAllBtn').onclick = refreshAll;
+
+document.getElementById('autoRefreshToggle').onchange = (e)=>{
+  if(e.target.checked) startAuto(); else stopAuto();
+};
+function startAuto(){
+  stopAuto();
+  autoTimer = setInterval(refreshAll, 75000);
+}
+function stopAuto(){ if(autoTimer) clearInterval(autoTimer); autoTimer=null; }
+
+// ---------- init ----------
+(async function init(){
+  await loadHoldings();
+  if(holdings.length===0){
+    holdings.push(seedDefault());
+    await saveHoldings();
+  }
+  renderTable();
+  await refreshAll();
+  startAuto();
+})();
+</script>
+</body>
+</html>
