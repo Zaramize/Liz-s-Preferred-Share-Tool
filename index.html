@@ -127,6 +127,17 @@
     border:1px solid var(--border); border-radius:6px; padding:9px 12px; font-size:13px;
   }
   .sres-item .l{font-family:var(--mono);}
+  .lres-card{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:8px;
+    padding:13px 14px; display:flex; justify-content:space-between; gap:14px; align-items:flex-start;
+  }
+  .lres-card .lres-ticker{font-family:var(--mono); font-weight:600; font-size:14px;}
+  .lres-card .lres-desc{color:var(--muted); font-size:12px; margin-top:2px;}
+  .lres-card .lres-meta{display:flex; gap:14px; margin-top:8px; flex-wrap:wrap;}
+  .lres-card .lres-meta .m{font-size:11.5px; color:var(--text);}
+  .lres-card .lres-meta .m .ml{color:var(--muted); display:block; font-size:10px; text-transform:uppercase; letter-spacing:.03em;}
+  .lres-card button{white-space:nowrap;}
+  .lres-card button.added{color:var(--teal); border-color:#2f5a4d; cursor:default;}
   .loading-txt{color:var(--muted); font-size:12.5px; font-style:italic;}
   .footer-note{color:var(--muted); font-size:11.5px; margin-top:24px; line-height:1.6;}
 </style>
@@ -158,7 +169,8 @@
   <div class="addpanel" id="addPanel">
     <div class="tabs">
       <div class="tab active" data-tab="manual">Manual entry</div>
-      <div class="tab" data-tab="search">Search by issuer</div>
+      <div class="tab" data-tab="search">Look up ticker / issuer</div>
+      <div class="tab" data-tab="pdf">Upload prospectus PDF</div>
     </div>
 
     <div id="tab-manual">
@@ -181,12 +193,20 @@
           <option value="yes">Yes</option><option value="no">No</option>
         </select>
       </div>
+      <div id="m_source_note" class="src-note" style="display:none;"></div>
       <div class="form-row"><label></label><button class="primary" id="m_save">Add to watchlist</button></div>
     </div>
 
+    <div id="tab-pdf" style="display:none;">
+      <div class="form-row"><label>Prospectus PDF</label><input type="file" id="p_file" accept="application/pdf"></div>
+      <div class="form-row"><label></label><button class="primary" id="p_go">Extract terms from PDF</button></div>
+      <div id="p_status" class="loading-txt"></div>
+      <div class="src-note" style="margin-top:6px;">Reads the uploaded prospectus directly and pulls terms into the manual entry tab for you to review before saving — no web search involved, so this is the most reliable source when you have the document in hand.</div>
+    </div>
+
     <div id="tab-search" style="display:none;">
-      <div class="form-row"><label>Issuer name</label><input type="text" id="s_issuer" placeholder="e.g. Royal Bank of Canada"></div>
-      <div class="form-row"><label></label><button class="primary" id="s_go">Search for series</button></div>
+      <div class="form-row"><label>Issuer or ticker</label><input type="text" id="s_issuer" placeholder="e.g. Royal Bank of Canada, or ENB.PF.A"></div>
+      <div class="form-row"><label></label><button class="primary" id="s_go">Look up</button></div>
       <div id="s_status" class="loading-txt"></div>
       <div class="searchresults" id="s_results"></div>
     </div>
@@ -458,6 +478,7 @@ function openDetail(idx){
       </div>
 
       <div class="section-label">Terms</div>
+      <div class="src-note" style="margin-bottom:10px;">Source: ${h.termsSourceUrl||h.termsSourceName ? sourceLine(h.termsSourceUrl, h.termsSourceName) : 'not recorded'}</div>
       <div class="grid2">
         <div>
           <div class="kv"><span class="k">Par value</span><span class="v">$${h.par.toFixed(2)}</span></div>
@@ -522,8 +543,11 @@ document.querySelectorAll('.tab').forEach(t=>{
     t.classList.add('active');
     document.getElementById('tab-manual').style.display = t.dataset.tab==='manual' ? 'block':'none';
     document.getElementById('tab-search').style.display = t.dataset.tab==='search' ? 'block':'none';
+    document.getElementById('tab-pdf').style.display = t.dataset.tab==='pdf' ? 'block':'none';
   };
 });
+let pendingSource = { url:null, name:null };
+
 document.getElementById('m_save').onclick = async ()=>{
   const ticker = document.getElementById('m_ticker').value.trim();
   if(!ticker) return;
@@ -541,59 +565,222 @@ document.getElementById('m_save').onclick = async ()=>{
     cumulative: document.getElementById('m_cumulative').value==='yes',
     callable: true,
     convertsTo: null,
+    termsSourceUrl: pendingSource.url,
+    termsSourceName: pendingSource.name || 'manual entry',
     price:null, priceSource:null, priceTimestamp:null, manualPrice:null
   };
   holdings.push(h);
   await saveHoldings();
   renderTable();
   document.getElementById('addPanel').classList.remove('open');
+  document.getElementById('m_source_note').style.display = 'none';
+  pendingSource = { url:null, name:null };
   refreshPrice(h).then(async ()=>{ await saveHoldings(); renderTable(); });
 };
 
+function looksLikeTicker(s){
+  return /^[A-Z]{1,5}\.(PF|PR)\.[A-Z0-9]{1,3}$/i.test(s.trim());
+}
+
+async function callClaudeSearch(prompt){
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:1500,
+      messages:[{role:'user', content: prompt}],
+      tools:[{type:'web_search_20250305', name:'web_search'}]
+    })
+  });
+  if(!resp.ok) throw new Error('claude api http '+resp.status);
+  const data = await resp.json();
+  return (data.content||[]).map(b=>b.text||'').filter(Boolean).join('\n');
+}
+
+// Stage 1: list series for an issuer, each with a brief summary
+async function searchByIssuer(issuer){
+  const prompt = 'Search the web for the currently outstanding Canadian preferred share series issued by "'+issuer+'" trading on the TSX. For each series, reply with ONLY a JSON array, no markdown, no commentary, in this exact shape: '+
+    '[{"ticker":"XXX.PR.X","seriesName":"short description e.g. Series 9","type":"reset|floating|perpetual","currentRate":5.67,"nextResetDate":"YYYY-MM-DD or null","cumulative":true,"sourceUrl":"the URL of the page this came from","sourceName":"short label, e.g. issuer IR page, TMX Money, CNW release"}]. '+
+    'Include up to 12 series, most relevant/liquid first. Use null for any field you cannot find rather than guessing. Always include the actual URL you found the information on.';
+  const text = await callClaudeSearch(prompt);
+  const clean = text.replace(/```json|```/g,'').trim();
+  const m = clean.match(/\[[\s\S]*\]/);
+  if(!m) throw new Error('no series found');
+  return JSON.parse(m[0]);
+}
+
+// Stage 2: full prospectus-style terms for one specific ticker
+async function fetchFullTerms(ticker, issuerHint){
+  const prompt = 'Search the web for the prospectus terms of the Canadian preferred share "'+ticker+'"'+(issuerHint?(' issued by '+issuerHint):'')+
+    ', listed on the TSX. Reply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
+    '{"issuer":"issuer legal name","seriesName":"e.g. Cumulative Redeemable Preference Shares, Series 9","type":"reset|floating|perpetual","par":25.00,'+
+    '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true,"convertsTo":"short description or null",'+
+    '"sourceUrl":"the URL of the page you drew these terms from","sourceName":"short label, e.g. issuer IR page, CNW press release, TMX Money"}. '+
+    'Use null for anything you cannot confirm rather than guessing. Always include the actual URL you found the information on — prefer the issuer\'s own investor relations page or a newswire (CNW/PRNewswire/Business Wire) release over aggregator sites when both are available.';
+  const text = await callClaudeSearch(prompt);
+  const clean = text.replace(/```json|```/g,'').trim();
+  const m = clean.match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('no terms found');
+  return JSON.parse(m[0]);
+}
+
+function sourceLine(url, name){
+  if(!url && !name) return '';
+  const label = name || 'source';
+  return url ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--teal); text-decoration:none;">${label} ↗</a>` : label;
+}
+
+function renderLookupCard(item, issuerHint){
+  const div = document.createElement('div');
+  div.className='lres-card';
+  const rateStr = item.currentRate!=null ? item.currentRate+'%' : '—';
+  const structStr = item.type==='reset' ? '5-yr GoC reset' : item.type==='floating' ? 'Floating T-bill' : 'Fixed perpetual';
+  div.innerHTML = `
+    <div>
+      <div class="lres-ticker">${item.ticker}</div>
+      <div class="lres-desc">${item.seriesName||''}</div>
+      <div class="lres-meta">
+        <div class="m"><span class="ml">Rate</span>${rateStr}</div>
+        <div class="m"><span class="ml">Structure</span>${structStr}</div>
+        <div class="m"><span class="ml">Next reset</span>${item.nextResetDate||'—'}</div>
+        <div class="m"><span class="ml">Cumulative</span>${item.cumulative===false?'No':'Yes'}</div>
+      </div>
+      <div class="src-note" style="margin-top:8px;">${item.sourceUrl||item.sourceName ? 'Source: '+sourceLine(item.sourceUrl, item.sourceName) : 'No source captured — verify before relying on this.'}</div>
+    </div>
+    <button data-t="${item.ticker}">+ Add to watchlist</button>
+  `;
+  const btn = div.querySelector('button');
+  btn.onclick = async ()=>{
+    btn.disabled = true; btn.textContent = 'Fetching terms…';
+    try{
+      const full = await fetchFullTerms(item.ticker, issuerHint);
+      const h = {
+        ticker: item.ticker,
+        issuer: full.issuer || issuerHint || '',
+        series: full.seriesName || item.seriesName || '',
+        type: full.type || item.type || 'reset',
+        par: full.par || 25.00,
+        currentRate: full.currentRate!=null ? full.currentRate : (item.currentRate||0),
+        spreadBps: full.spreadBps!=null ? full.spreadBps : null,
+        lastResetDate: full.lastResetDate || null,
+        nextResetDate: full.nextResetDate || item.nextResetDate || null,
+        resetFreqYears: 5,
+        cumulative: full.cumulative!=null ? full.cumulative : (item.cumulative!==false),
+        callable: true,
+        convertsTo: full.convertsTo || null,
+        termsSourceUrl: full.sourceUrl || item.sourceUrl || null,
+        termsSourceName: full.sourceName || item.sourceName || 'web search',
+        price:null, priceSource:null, priceTimestamp:null, manualPrice:null
+      };
+      holdings.push(h);
+      await saveHoldings();
+      renderTable();
+      refreshPrice(h).then(async ()=>{ await saveHoldings(); renderTable(); });
+      btn.textContent = '✓ Added'; btn.classList.add('added');
+    }catch(e){
+      btn.disabled = false;
+      btn.textContent = 'Retry — terms lookup failed';
+    }
+  };
+  return div;
+}
+
 document.getElementById('s_go').onclick = async ()=>{
-  const issuer = document.getElementById('s_issuer').value.trim();
-  if(!issuer) return;
+  const query = document.getElementById('s_issuer').value.trim();
+  if(!query) return;
   const statusEl = document.getElementById('s_status');
   const resultsEl = document.getElementById('s_results');
-  statusEl.textContent = 'Searching for outstanding preferred series...';
   resultsEl.innerHTML='';
+
+  if(looksLikeTicker(query)){
+    statusEl.textContent = 'Looking up '+query+'...';
+    try{
+      const full = await fetchFullTerms(query, null);
+      statusEl.textContent = 'Found — review and add:';
+      const item = {
+        ticker: query, seriesName: full.seriesName, type: full.type,
+        currentRate: full.currentRate, nextResetDate: full.nextResetDate, cumulative: full.cumulative,
+        sourceUrl: full.sourceUrl, sourceName: full.sourceName
+      };
+      resultsEl.appendChild(renderLookupCard(item, full.issuer));
+    }catch(e){
+      statusEl.textContent = 'Could not find terms for that ticker — try the manual entry tab, or double check the ticker format (e.g. ENB.PF.A).';
+    }
+    return;
+  }
+
+  statusEl.textContent = 'Searching for outstanding series issued by '+query+'...';
   try{
-    const prompt = 'Search the web for all currently outstanding Canadian preferred share series issued by "'+issuer+'" that trade on the TSX. Reply with ONLY a JSON array, no markdown, no commentary, in this shape: [{"ticker":"XXX.PR.X","series":"short description","type":"reset|floating|perpetual","rate":"e.g. 5.20% or 3-mo T-bill + 2.5%"}]. Include up to 12 series.';
+    const list = await searchByIssuer(query);
+    statusEl.textContent = list.length+' series found. Review before adding — terms come from a live web search, so confirm against the prospectus for anything you plan to trade on:';
+    list.forEach(item=> resultsEl.appendChild(renderLookupCard(item, query)));
+  }catch(e){
+    statusEl.textContent = 'Search failed or returned nothing usable — try a specific ticker, or the manual entry tab.';
+  }
+};
+
+// ---------- PDF prospectus extraction ----------
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve(r.result.split(',')[1]);
+    r.onerror = ()=> reject(new Error('file read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+document.getElementById('p_go').onclick = async ()=>{
+  const fileInput = document.getElementById('p_file');
+  const statusEl = document.getElementById('p_status');
+  const file = fileInput.files[0];
+  if(!file){ statusEl.textContent = 'Choose a PDF first.'; return; }
+  statusEl.textContent = 'Reading '+file.name+' and extracting terms…';
+  try{
+    const base64 = await fileToBase64(file);
+    const prompt = 'This is a preferred share prospectus or prospectus supplement. Extract its terms and reply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
+      '{"ticker":"TSX ticker if stated, else null","issuer":"issuer legal name","seriesName":"e.g. Cumulative Redeemable Preference Shares, Series 9","type":"reset|floating|perpetual","par":25.00,'+
+      '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true,"convertsTo":"short description or null"}. '+
+      'Use null for anything not stated in the document rather than guessing.';
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         model:'claude-sonnet-4-6',
-        max_tokens:1000,
-        messages:[{role:'user', content: prompt}],
-        tools:[{type:'web_search_20250305', name:'web_search'}]
+        max_tokens:1500,
+        messages:[{role:'user', content:[
+          { type:'document', source:{ type:'base64', media_type:'application/pdf', data: base64 } },
+          { type:'text', text: prompt }
+        ]}]
       })
     });
-    if(!resp.ok) throw new Error('search failed');
+    if(!resp.ok) throw new Error('extraction failed');
     const data = await resp.json();
     const text = (data.content||[]).map(b=>b.text||'').filter(Boolean).join('\n');
     const clean = text.replace(/```json|```/g,'').trim();
-    const arrMatch = clean.match(/\[[\s\S]*\]/);
-    if(!arrMatch) throw new Error('no series found');
-    const list = JSON.parse(arrMatch[0]);
-    statusEl.textContent = list.length + ' series found — click to add (you\'ll confirm/edit full terms after):';
-    resultsEl.innerHTML='';
-    list.forEach(item=>{
-      const div = document.createElement('div');
-      div.className='sres-item';
-      div.innerHTML = `<span class="l">${item.ticker} — ${item.series||''} (${item.rate||''})</span><button data-t="${item.ticker}">+ Add</button>`;
-      div.querySelector('button').onclick = async ()=>{
-        document.getElementById('m_ticker').value = item.ticker;
-        document.getElementById('m_issuer').value = issuer;
-        document.getElementById('m_series').value = item.series||'';
-        document.getElementById('m_type').value = item.type||'reset';
-        document.querySelector('.tab[data-tab="manual"]').click();
-        statusEl.textContent = 'Loaded into manual entry — confirm par, rate, spread and reset date before saving (double-check against the prospectus).';
-      };
-      resultsEl.appendChild(div);
-    });
+    const m = clean.match(/\{[\s\S]*\}/);
+    if(!m) throw new Error('could not parse terms from document');
+    const full = JSON.parse(m[0]);
+
+    document.getElementById('m_ticker').value = full.ticker || '';
+    document.getElementById('m_issuer').value = full.issuer || '';
+    document.getElementById('m_series').value = full.seriesName || '';
+    document.getElementById('m_type').value = full.type || 'reset';
+    document.getElementById('m_par').value = full.par || 25.00;
+    document.getElementById('m_rate').value = full.currentRate || '';
+    document.getElementById('m_spread').value = full.spreadBps || '';
+    document.getElementById('m_resetdate').value = full.nextResetDate || '';
+    document.getElementById('m_cumulative').value = full.cumulative===false ? 'no' : 'yes';
+
+    pendingSource = { url:null, name:'Uploaded PDF: '+file.name };
+    const noteEl = document.getElementById('m_source_note');
+    noteEl.style.display = 'block';
+    noteEl.textContent = 'Terms extracted from uploaded PDF (' + file.name + ') — review the fields below, then Add to watchlist.';
+
+    document.querySelector('.tab[data-tab="manual"]').click();
+    statusEl.textContent = 'Extracted — switched to manual entry for you to review before saving.';
   }catch(e){
-    statusEl.textContent = 'Search failed or returned nothing usable — try adding manually instead.';
+    statusEl.textContent = 'Could not extract terms from that PDF — make sure it\'s text-based (not a scanned image), or enter terms manually.';
   }
 };
 
