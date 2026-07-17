@@ -76,7 +76,9 @@ export async function onRequestPost(context) {
       if (upstream.ok) {
         const data = JSON.parse(text);
         const candidateText = data.candidates && data.candidates[0] && data.candidates[0].content &&
-          data.candidates[0].content.parts ? data.candidates[0].content.parts.map(p => p.text || '').join('') : '';
+          data.candidates[0].content.parts
+            ? data.candidates[0].content.parts.filter(p => !p.thought).map(p => p.text || '').join('')
+            : '';
         return new Response(JSON.stringify({ text: candidateText, modelUsed: model }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
