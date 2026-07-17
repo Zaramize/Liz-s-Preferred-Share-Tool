@@ -666,7 +666,9 @@ function applyGuessesToManualForm(guesses, sourceName){
 // ---------- optional: AI-assisted extraction via Google's free-tier Gemini API ----------
 // Requires the person to set up their own free GEMINI_API_KEY (see SETUP.md).
 // Not used anywhere automatically — only fires when the "Parse with AI" button is clicked.
-async function callGeminiExtract(prompt, inlineData){
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+async function callGeminiExtractOnce(prompt, inlineData){
   const resp = await fetch('/api/gemini-proxy', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -678,12 +680,57 @@ async function callGeminiExtract(prompt, inlineData){
     const errObj = data.error;
     const msg = (errObj && typeof errObj === 'object') ? (errObj.message || JSON.stringify(errObj))
               : (typeof errObj === 'string' ? errObj : ('gemini proxy http '+resp.status));
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = resp.status;
+    err.transient = resp.status === 503 || resp.status === 429 || /overloaded|high demand|unavailable/i.test(msg);
+    throw err;
   }
   const clean = (data.text||'').replace(/```json|```/g,'').trim();
-  const m = clean.match(/\{[\s\S]*\}/);
-  if(!m) throw new Error('no JSON object in Gemini response — got: '+clean.slice(0,200));
-  return JSON.parse(m[0]);
+  try{ return JSON.parse(clean); }catch(e){ /* fall through to extraction below */ }
+  const extracted = extractFirstJsonObject(clean);
+  if(!extracted) throw new Error('no JSON object in Gemini response — got: '+clean.slice(0,200));
+  return JSON.parse(extracted);
+}
+
+// Scans for the first balanced {...} object, respecting string literals so
+// braces inside quoted values (e.g. a series description) don't throw off
+// the match — safer than a greedy regex when the model appends extra text.
+function extractFirstJsonObject(text){
+  const start = text.indexOf('{');
+  if(start === -1) return null;
+  let depth = 0, inString = false, escaped = false;
+  for(let i=start; i<text.length; i++){
+    const c = text[i];
+    if(inString){
+      if(escaped) escaped = false;
+      else if(c === '\\') escaped = true;
+      else if(c === '"') inString = false;
+    } else {
+      if(c === '"') inString = true;
+      else if(c === '{') depth++;
+      else if(c === '}'){ depth--; if(depth === 0) return text.slice(start, i+1); }
+    }
+  }
+  return null;
+}
+
+// Retries automatically on transient overload (503) or rate-limit (429) errors —
+// Gemini's free tier gets deprioritized under load, so a short backoff-and-retry
+// clears most of these without the person needing to click the button again.
+async function callGeminiExtract(prompt, inlineData, statusEl){
+  const delays = [1500, 3000, 6000];
+  let lastErr;
+  for(let attempt=0; attempt<=delays.length; attempt++){
+    try{
+      return await callGeminiExtractOnce(prompt, inlineData);
+    }catch(e){
+      lastErr = e;
+      if(!e.transient || attempt===delays.length) throw e;
+      if(statusEl) statusEl.textContent = 'Gemini is busy — retrying in '+(delays[attempt]/1000)+'s (attempt '+(attempt+2)+' of '+(delays.length+1)+')…';
+      await sleep(delays[attempt]);
+    }
+  }
+  throw lastErr;
 }
 const EXTRACT_PROMPT = 'You are reading Canadian preferred share terms from the text below. '+
   'Reply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
@@ -745,7 +792,7 @@ document.getElementById('p_go').onclick = async ()=>{
       aiStatus.style.display = 'block';
       aiStatus.textContent = 'Asking Gemini to parse this text…';
       try{
-        const full = await callGeminiExtract(EXTRACT_PROMPT + text.slice(0, 30000));
+        const full = await callGeminiExtract(EXTRACT_PROMPT + text.slice(0, 30000), null, aiStatus);
         applyFullTermsToManualForm(full, 'uploaded PDF: '+file.name);
       }catch(e){
         aiStatus.textContent = 'AI parse failed — '+e.message+'. Make sure GEMINI_API_KEY is set in Cloudflare Pages (see SETUP.md), or fall back to the pattern guesses / manual entry.';
@@ -827,7 +874,7 @@ document.getElementById('l_go').onclick = async ()=>{
       aiStatus.textContent = 'Asking Gemini to parse this page…';
       try{
         const hint = issuer ? ('The issuer is "'+issuer+'". ') : '';
-        const full = await callGeminiExtract(hint + EXTRACT_PROMPT + data.text.slice(0, 30000));
+        const full = await callGeminiExtract(hint + EXTRACT_PROMPT + data.text.slice(0, 30000), null, aiStatus);
         applyFullTermsToManualForm(full, (issuer||'IR page')+' ('+url+')');
       }catch(e){
         aiStatus.textContent = 'AI parse failed — '+e.message+'. Make sure GEMINI_API_KEY is set in Cloudflare Pages (see SETUP.md), or fall back to the pattern guesses / manual entry.';
