@@ -638,7 +638,13 @@ async function callClaudeSearch(prompt){
       tools:[{type:'web_search_20250305', name:'web_search'}]
     })
   });
-  if(!resp.ok) throw new Error('claude api http '+resp.status);
+  if(!resp.ok){
+    let detail = '';
+    try{ detail = (await resp.text()).slice(0,300); }catch(e){}
+    const err = new Error('claude api http '+resp.status);
+    err.rawResponse = detail;
+    throw err;
+  }
   const data = await resp.json();
   return (data.content||[]).map(b=>b.text||'').filter(Boolean).join('\n');
 }
@@ -703,7 +709,11 @@ async function searchByIssuer(issuer){
   const text = await callClaudeSearch(prompt);
   const clean = text.replace(/```json|```/g,'').trim();
   const m = clean.match(/\[[\s\S]*\]/);
-  if(!m) throw new Error('no series found');
+  if(!m){
+    const err = new Error('no series found');
+    err.rawResponse = clean.slice(0, 400);
+    throw err;
+  }
   return JSON.parse(m[0]);
 }
 
@@ -718,7 +728,11 @@ async function fetchFullTerms(ticker, issuerHint){
   const text = await callClaudeSearch(prompt);
   const clean = text.replace(/```json|```/g,'').trim();
   const m = clean.match(/\{[\s\S]*\}/);
-  if(!m) throw new Error('no terms found');
+  if(!m){
+    const err = new Error('no terms found');
+    err.rawResponse = clean.slice(0, 400);
+    throw err;
+  }
   return JSON.parse(m[0]);
 }
 
@@ -802,7 +816,8 @@ document.getElementById('s_go').onclick = async ()=>{
       };
       resultsEl.appendChild(renderLookupCard(item, full.issuer));
     }catch(e){
-      statusEl.textContent = 'Could not find terms for that ticker — try the manual entry tab, or double check the ticker format (e.g. ENB.PF.A).';
+      statusEl.innerHTML = 'Could not find terms for that ticker (try the manual entry tab, or double check the format, e.g. ENB.PF.A).'+
+        `<br><span style="color:var(--red); font-family:var(--mono); font-size:11px;">${e.message}${e.rawResponse ? ' — response: '+e.rawResponse.replace(/</g,'&lt;') : ''}</span>`;
     }
     return;
   }
@@ -810,10 +825,15 @@ document.getElementById('s_go').onclick = async ()=>{
   statusEl.textContent = 'Searching for outstanding series issued by '+query+'...';
   try{
     const list = await searchByIssuer(query);
+    if(list.length===0){
+      statusEl.textContent = 'Search ran but returned zero series — try the full legal name (e.g. "Royal Bank of Canada" instead of "RBC"), or a specific ticker.';
+      return;
+    }
     statusEl.textContent = list.length+' series found. Review before adding — terms come from a live web search, so confirm against the prospectus for anything you plan to trade on:';
     list.forEach(item=> resultsEl.appendChild(renderLookupCard(item, query)));
   }catch(e){
-    statusEl.textContent = 'Search failed or returned nothing usable — try a specific ticker, or the manual entry tab.';
+    statusEl.innerHTML = 'Search failed to parse a usable result — try the full legal name instead of an abbreviation/ticker, or a specific ticker directly.'+
+      `<br><span style="color:var(--red); font-family:var(--mono); font-size:11px;">${e.message}${e.rawResponse ? ' — response: '+e.rawResponse.replace(/</g,'&lt;') : ''}</span>`;
   }
 };
 
