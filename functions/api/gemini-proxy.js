@@ -1,15 +1,18 @@
 // Cloudflare Pages Function — lives at /api/gemini-proxy
 // Proxies to Google's Gemini API (generativelanguage.googleapis.com).
-// Uses Gemini 2.5 Flash, which has a genuine free tier (rate-limited, no
-// credit card) as long as billing is never enabled on the Google Cloud
-// project the key belongs to. The key lives only here (server-side env
-// var), never in the browser.
+// Uses Gemini's "flash-latest" alias, which Google points at whatever their
+// current fast/free-tier-eligible Flash model is. Using the alias instead
+// of a hardcoded version (e.g. gemini-2.5-flash) avoids breaking every time
+// Google retires an old model version — the free tier (rate-limited, no
+// credit card) is available as long as billing is never enabled on the
+// Google Cloud project the key belongs to. The key lives only here
+// (server-side env var), never in the browser.
 //
 // Get a free key at https://aistudio.google.com/apikey and set it in
 // Cloudflare Pages: Project > Settings > Environment variables ->
 // GEMINI_API_KEY (set for both Production and Preview).
 
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-flash-latest';
 
 export async function onRequestPost(context) {
   const apiKey = context.env.GEMINI_API_KEY;
