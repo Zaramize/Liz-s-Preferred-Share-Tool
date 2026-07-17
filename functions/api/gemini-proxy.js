@@ -12,7 +12,25 @@
 // Cloudflare Pages: Project > Settings > Environment variables ->
 // GEMINI_API_KEY (set for both Production and Preview).
 
-const MODEL = 'gemini-flash-latest';
+// Cloudflare Pages Function — lives at /api/gemini-proxy
+// Proxies to Google's Gemini API (generativelanguage.googleapis.com).
+// Tries a chain of model aliases in order — Flash-Lite first (smaller model,
+// far fewer apps default to it, so it's usually much less congested on the
+// free tier), then full Flash as a fallback. Using aliases instead of
+// hardcoded versions avoids breaking every time Google retires an old model.
+// The free tier (rate-limited, no credit card) is available as long as
+// billing is never enabled on the Google Cloud project the key belongs to.
+// The key lives only here (server-side env var), never in the browser.
+//
+// Get a free key at https://aistudio.google.com/apikey and set it in
+// Cloudflare Pages: Project > Settings > Environment variables ->
+// GEMINI_API_KEY (set for both Production and Preview).
+
+const MODEL_CHAIN = ['gemini-flash-lite-latest', 'gemini-flash-latest'];
+
+function isTransient(status, bodyText){
+  return status === 503 || status === 429 || /overloaded|high demand|unavailable/i.test(bodyText || '');
+}
 
 export async function onRequestPost(context) {
   const apiKey = context.env.GEMINI_API_KEY;
@@ -43,33 +61,38 @@ export async function onRequestPost(context) {
     generationConfig: { responseMimeType: 'application/json' }
   };
 
-  try {
-    const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        body: JSON.stringify(body)
+  let lastText = '', lastStatus = 502;
+  for (const model of MODEL_CHAIN) {
+    try {
+      const upstream = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify(body)
+        }
+      );
+      const text = await upstream.text();
+      if (upstream.ok) {
+        const data = JSON.parse(text);
+        const candidateText = data.candidates && data.candidates[0] && data.candidates[0].content &&
+          data.candidates[0].content.parts ? data.candidates[0].content.parts.map(p => p.text || '').join('') : '';
+        return new Response(JSON.stringify({ text: candidateText, modelUsed: model }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
-    );
-    const text = await upstream.text();
-    if (!upstream.ok) {
-      return new Response(text, {
-        status: upstream.status,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      lastText = text; lastStatus = upstream.status;
+      if (!isTransient(upstream.status, text)) {
+        // Non-transient failure (bad request, invalid key, etc.) — no point trying the next model.
+        return new Response(text, { status: upstream.status, headers: { 'Content-Type': 'application/json' } });
+      }
+      // Transient (overloaded/rate-limited) — fall through and try the next model in the chain.
+    } catch (err) {
+      lastText = JSON.stringify({ error: { message: String(err) } });
+      lastStatus = 502;
     }
-    const data = JSON.parse(text);
-    const candidateText = data.candidates && data.candidates[0] && data.candidates[0].content &&
-      data.candidates[0].content.parts ? data.candidates[0].content.parts.map(p => p.text || '').join('') : '';
-    return new Response(JSON.stringify({ text: candidateText }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: 'Upstream request to Gemini API failed', detail: String(err) }), {
-      status: 502,
-      headers: { 'Content-Type': 'application/json' }
-    });
   }
+  // Every model in the chain failed with a transient error.
+  return new Response(lastText, { status: lastStatus, headers: { 'Content-Type': 'application/json' } });
 }
