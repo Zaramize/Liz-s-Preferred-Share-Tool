@@ -159,6 +159,7 @@
 
   <div class="toolbar">
     <button class="primary" id="refreshAllBtn">↻ Refresh all</button>
+    <button id="checkUpdatesBtn">🔔 Check for rate/reset news</button>
     <button id="addBtn">+ Add holding</button>
     <span class="spacer"></span>
     <label style="color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px;">
@@ -252,6 +253,7 @@ const STORE_KEY = 'holdings-v1';
 let holdings = [];
 let refRates = { goc5yr: null, tbill3mo: null, updated: null };
 let autoTimer = null;
+let pendingUpdates = {}; // ticker -> { newRate, newNextResetDate, summary, sourceUrl, sourceName }
 
 // ---------- storage ----------
 async function loadHoldings(){
@@ -452,8 +454,9 @@ function renderTable(){
                   : h.type==='floating' ? '<span class="tag float">FLOAT</span>'
                   : '<span class="tag">PERP</span>';
     const dleft = daysUntil(h.nextResetDate);
+    const updateBadge = pendingUpdates[h.ticker] ? ` <span class="tag" style="color:var(--amber); border-color:#4a3d20; cursor:pointer;" data-update-ticker="${h.ticker}">● update found</span>` : '';
     tr.innerHTML = `
-      <td><div class="ticker">${h.ticker}</div><div class="issuer">${h.issuer||''}</div></td>
+      <td><div class="ticker">${h.ticker}${updateBadge}</div><div class="issuer">${h.issuer||''}</div></td>
       <td>${typeTag}</td>
       <td class="num">${fmtPrice(price)}</td>
       <td class="num">${fmtPct(cy)}</td>
@@ -485,6 +488,19 @@ function openDetail(idx){
         <div class="sfield"><div class="lbl">Yield to reset</div><div class="val">${fmtPct(ytr)}</div></div>
         <div class="sfield"><div class="lbl">Yield to worst</div><div class="val">${fmtPct(ytw)}</div></div>
       </div>
+
+      ${pendingUpdates[h.ticker] ? `
+      <div style="background:#2a2214; border:1px solid #4a3d20; border-radius:8px; padding:14px 16px; margin-bottom:18px;">
+        <div style="color:var(--amber); font-weight:600; font-size:12.5px; margin-bottom:6px;">🔔 Possible update found</div>
+        <div style="font-size:13px; margin-bottom:8px;">${pendingUpdates[h.ticker].summary || 'A change was detected.'}</div>
+        <div class="src-note" style="margin-bottom:10px;">
+          ${pendingUpdates[h.ticker].newRate!=null ? 'New rate: '+pendingUpdates[h.ticker].newRate+'% (currently '+h.currentRate+'%). ' : ''}
+          ${pendingUpdates[h.ticker].newNextResetDate ? 'New next reset: '+pendingUpdates[h.ticker].newNextResetDate+'. ' : ''}
+          Source: ${sourceLine(pendingUpdates[h.ticker].sourceUrl, pendingUpdates[h.ticker].sourceName)}
+        </div>
+        <button class="primary" id="acceptUpdateBtn">Apply update</button>
+        <button class="ghost" id="dismissUpdateBtn">Dismiss</button>
+      </div>` : ''}
 
       <div class="section-label">Terms</div>
       <div class="src-note" style="margin-bottom:10px;">Source: ${h.termsSourceUrl||h.termsSourceName ? sourceLine(h.termsSourceUrl, h.termsSourceName) : 'not recorded'}</div>
@@ -538,6 +554,25 @@ function openDetail(idx){
     holdings.splice(idx,1);
     await saveHoldings(); renderTable(); closeDetail();
   };
+  const acceptBtn = document.getElementById('acceptUpdateBtn');
+  if(acceptBtn){
+    acceptBtn.onclick = async ()=>{
+      const upd = pendingUpdates[h.ticker];
+      if(upd.newRate != null) h.currentRate = upd.newRate;
+      if(upd.newNextResetDate) h.nextResetDate = upd.newNextResetDate;
+      h.termsSourceUrl = upd.sourceUrl || h.termsSourceUrl;
+      h.termsSourceName = upd.sourceName || h.termsSourceName;
+      delete pendingUpdates[h.ticker];
+      await saveHoldings(); renderTable(); openDetail(idx);
+    };
+  }
+  const dismissBtn = document.getElementById('dismissUpdateBtn');
+  if(dismissBtn){
+    dismissBtn.onclick = ()=>{
+      delete pendingUpdates[h.ticker];
+      renderTable(); openDetail(idx);
+    };
+  }
 }
 function closeDetail(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeDetail(); });
@@ -607,6 +642,58 @@ async function callClaudeSearch(prompt){
   const data = await resp.json();
   return (data.content||[]).map(b=>b.text||'').filter(Boolean).join('\n');
 }
+
+// ---------- in-tool "check for updates" (replaces needing a separate scraper script) ----------
+async function checkHoldingForUpdate(h){
+  const prompt = 'Search the web for recent (within roughly the last 12 months) news about a dividend rate reset, '+
+    'a newly announced dividend rate, or a new prospectus supplement for the Canadian preferred share "'+h.ticker+'"'+
+    (h.issuer ? (' issued by '+h.issuer) : '')+(h.series ? (', '+h.series) : '')+
+    '. The currently recorded terms are: annual rate '+h.currentRate+'%, next reset/call date '+(h.nextResetDate||'unknown')+'. '+
+    'Reply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
+    '{"foundUpdate": true or false, "newRate": number or null, "newNextResetDate": "YYYY-MM-DD or null", "summary": "one sentence describing what changed, or null", "sourceUrl": "URL or null", "sourceName": "short label or null"}. '+
+    'Set foundUpdate to false if nothing more recent than what\'s already recorded turns up.';
+  const text = await callClaudeSearch(prompt);
+  const clean = text.replace(/```json|```/g,'').trim();
+  const m = clean.match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('no update-check result found');
+  return JSON.parse(m[0]);
+}
+
+async function checkAllForUpdates(){
+  const btn = document.getElementById('checkUpdatesBtn');
+  btn.disabled = true;
+  let foundCount = 0;
+  for(const h of holdings){
+    btn.textContent = 'Checking '+h.ticker+'…';
+    try{
+      const result = await checkHoldingForUpdate(h);
+      const rateChanged = result.newRate != null && Math.abs(result.newRate - h.currentRate) > 0.001;
+      const dateChanged = result.newNextResetDate && result.newNextResetDate !== h.nextResetDate;
+      if(result.foundUpdate && (rateChanged || dateChanged)){
+        pendingUpdates[h.ticker] = result;
+        foundCount++;
+      } else {
+        delete pendingUpdates[h.ticker];
+      }
+    }catch(e){
+      // Silently skip — this is a best-effort background check, not critical path.
+    }
+    renderTable();
+    await new Promise(r=>setTimeout(r, 500));
+  }
+  btn.disabled = false;
+  btn.textContent = foundCount>0 ? `🔔 ${foundCount} update(s) found — click ● badges` : '🔔 Check for rate/reset news';
+}
+document.getElementById('checkUpdatesBtn').onclick = checkAllForUpdates;
+
+document.getElementById('watchBody').addEventListener('click', (e)=>{
+  const badge = e.target.closest('[data-update-ticker]');
+  if(!badge) return;
+  e.stopPropagation();
+  const ticker = badge.dataset.updateTicker;
+  const idx = holdings.findIndex(h=>h.ticker===ticker);
+  if(idx>=0) openDetail(idx);
+});
 
 // Stage 1: list series for an issuer, each with a brief summary
 async function searchByIssuer(issuer){
