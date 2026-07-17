@@ -215,7 +215,7 @@
         </div>
       </div>
       <div id="l_status" class="loading-txt"></div>
-      <div class="src-note" style="margin-top:6px;">Fetches the page server-side (to dodge browser CORS blocks) and strips it to plain text — no AI, nothing paid. Only a handful of major issuers are pre-loaded with a known IR URL; for anything else, use the Google button to find the right page, then paste its URL here.</div>
+      <div class="src-note" style="margin-top:6px;">Fetches the page server-side (to dodge browser CORS blocks) and strips it to plain text — no AI, nothing paid. Only a handful of major issuers are pre-loaded with a known IR URL; for anything else, use the Google button to find the right page, then paste its URL here. <b>For "Parse with AI," type the specific series ticker (e.g. RY.PR.S) rather than just the issuer name</b> — issuer pages often list a dozen+ series at once, and a specific ticker lets Gemini's live search target the right one.</div>
       <div id="l_guesses" class="src-note" style="display:none; margin-top:10px; color:var(--amber);"></div>
       <div id="l_prefill_row" style="display:none; margin-top:10px; gap:8px;">
         <button class="primary" id="l_prefill">Use pattern guesses in Manual entry →</button>
@@ -686,10 +686,14 @@ async function callGeminiExtractOnce(prompt, inlineData){
     throw err;
   }
   const clean = (data.text||'').replace(/```json|```/g,'').trim();
-  try{ return JSON.parse(clean); }catch(e){ /* fall through to extraction below */ }
-  const extracted = extractFirstJsonObject(clean);
-  if(!extracted) throw new Error('no JSON object in Gemini response — got: '+clean.slice(0,200));
-  return JSON.parse(extracted);
+  let parsed;
+  try{ parsed = JSON.parse(clean); }
+  catch(e){
+    const extracted = extractFirstJsonObject(clean);
+    if(!extracted) throw new Error('no JSON object in Gemini response — got: '+clean.slice(0,200));
+    parsed = JSON.parse(extracted);
+  }
+  return { data: parsed, sources: data.sources || [] };
 }
 
 // Scans for the first balanced {...} object, respecting string literals so
@@ -717,7 +721,7 @@ function extractFirstJsonObject(text){
 // Retries automatically on transient overload (503) or rate-limit (429) errors —
 // Gemini's free tier gets deprioritized under load, so a short backoff-and-retry
 // clears most of these without the person needing to click the button again.
-async function callGeminiExtract(prompt, inlineData, statusEl){
+async function callGeminiExtractFull(prompt, inlineData, statusEl){
   const delays = [1500, 3000, 6000];
   let lastErr;
   for(let attempt=0; attempt<=delays.length; attempt++){
@@ -732,15 +736,49 @@ async function callGeminiExtract(prompt, inlineData, statusEl){
   }
   throw lastErr;
 }
-const EXTRACT_PROMPT = 'You are reading Canadian preferred share terms from the text below. '+
-  'Reply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
-  '{"ticker":"TSX ticker like ENB.PF.A if stated, else null","issuer":"issuer legal name or null","seriesName":"e.g. Cumulative Redeemable Preference Shares, Series 9, or null","type":"reset|floating|perpetual or null","par":25.00,'+
-  '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true or false or null,"convertsTo":"short description or null"}. '+
-  'If the text covers multiple series, extract the one that looks most current/relevant, and mention which series you picked is not needed — just return its terms. '+
-  'Use null for anything not clearly stated rather than guessing.\n\nTEXT:\n';
+// Builds an extraction prompt targeted at a specific security when known.
+// Instructs the model to verify via live Google Search (grounding is enabled
+// server-side) rather than trust the pasted TEXT alone — the TEXT can be a
+// page listing many series at once, which is exactly what caused a wrong
+// series' numbers getting picked before. Search results and issuer press
+// releases should win over the pasted TEXT if they disagree.
+function buildExtractPrompt(targetHint, text){
+  return 'You are extracting the CURRENT contractual dividend terms of a specific Canadian preferred share.\n'+
+    (targetHint
+      ? 'The specific security to extract terms for is: '+targetHint+'. Use Google Search to find its terms directly — '+
+        'search things like "'+targetHint+' dividend rate reset" or "'+targetHint+' prospectus terms" — and prefer the '+
+        'issuer\'s own press release (CNW/Business Wire/newswire) or prospectus over the pasted TEXT below if they disagree, '+
+        'since the TEXT may be a page listing many different series and the wrong one could easily get picked.'
+      : 'Identify the specific series from the TEXT below, then use Google Search to verify its terms against the '+
+        'issuer\'s own press release or prospectus rather than relying on the TEXT alone.'
+    )+'\n\n'+
+    'Reply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
+    '{"ticker":"TSX ticker like ENB.PF.A if stated, else null","issuer":"issuer legal name or null","seriesName":"e.g. Cumulative Redeemable Preference Shares, Series 9, or null","type":"reset|floating|perpetual or null","par":25.00,'+
+    '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true or false or null,"convertsTo":"short description or null"}. '+
+    (targetHint ? 'If you cannot confidently verify terms specifically for '+targetHint+', return null for every field rather than guessing from an unrelated series. ' : '')+
+    'Use null for anything not clearly stated rather than guessing.\n\nTEXT (context only — verify against live search before trusting this):\n'+
+    text.slice(0, 30000);
+}
 
 // Fuller prefill (all fields, not just the regex guess subset) for AI-extracted terms.
-function applyFullTermsToManualForm(full, sourceName){
+// Flags implausible values rather than silently filling them in — a preferred
+// share's coupon is realistically in the low single digits to low teens, and
+// a "reset" type without a spread is a sign the extraction missed something.
+function sanityCheckTerms(full){
+  const warnings = [];
+  if(full.currentRate!=null && (full.currentRate < 0.5 || full.currentRate > 20)){
+    warnings.push('Rate of '+full.currentRate+'% looks implausible for a preferred share (expected roughly 0.5%–20%) — double-check it.');
+  }
+  if(full.type==='reset' && full.spreadBps==null){
+    warnings.push('Type is "reset" but no spread was found — reset preferreds should have a spread over the reference rate.');
+  }
+  if(full.nextResetDate){
+    const d = new Date(full.nextResetDate+'T00:00:00');
+    if(isNaN(d.getTime())) warnings.push('Next reset date "'+full.nextResetDate+'" doesn\'t look like a valid date.');
+  }
+  return warnings;
+}
+function applyFullTermsToManualForm(full, sourceName, sources){
   if(full.ticker) document.getElementById('m_ticker').value = full.ticker;
   if(full.issuer) document.getElementById('m_issuer').value = full.issuer;
   if(full.seriesName) document.getElementById('m_series').value = full.seriesName;
@@ -753,7 +791,14 @@ function applyFullTermsToManualForm(full, sourceName){
   pendingSource = { url:null, name:sourceName+' (AI-parsed via Gemini)' };
   const noteEl = document.getElementById('m_source_note');
   noteEl.style.display = 'block';
-  noteEl.textContent = 'Fields prefilled by Gemini from '+sourceName+' — still review each value before saving, especially if the source covered multiple series.';
+  const warnings = sanityCheckTerms(full);
+  const sourceLinks = (sources||[]).length
+    ? '<br>Verified against: '+sources.map(s=>'<a href="'+s.uri+'" target="_blank" rel="noopener" style="color:var(--teal);">'+ (s.title||s.uri) +'</a>').join(', ')
+    : '<br><span style="color:var(--amber);">No live search sources came back — this may be based on the pasted text alone. Verify carefully.</span>';
+  const warningHtml = warnings.length
+    ? '<br><span style="color:var(--red);">⚠ '+warnings.join(' ')+'</span>'
+    : '';
+  noteEl.innerHTML = 'Fields prefilled by Gemini from '+sourceName+' — still review each value before saving, especially if the source covered multiple series.'+sourceLinks+warningHtml;
   document.querySelector('.tab[data-tab="manual"]').click();
 }
 
@@ -790,10 +835,10 @@ document.getElementById('p_go').onclick = async ()=>{
     }
     document.getElementById('p_ai_parse').onclick = async ()=>{
       aiStatus.style.display = 'block';
-      aiStatus.textContent = 'Asking Gemini to parse this text…';
+      aiStatus.textContent = 'Asking Gemini to parse this text (verifying via live search)…';
       try{
-        const full = await callGeminiExtract(EXTRACT_PROMPT + text.slice(0, 30000), null, aiStatus);
-        applyFullTermsToManualForm(full, 'uploaded PDF: '+file.name);
+        const result = await callGeminiExtractFull(buildExtractPrompt(null, text), null, aiStatus);
+        applyFullTermsToManualForm(result.data, 'uploaded PDF: '+file.name, result.sources);
       }catch(e){
         aiStatus.textContent = 'AI parse failed — '+e.message+'. Make sure GEMINI_API_KEY is set in Cloudflare Pages (see SETUP.md), or fall back to the pattern guesses / manual entry.';
       }
@@ -871,11 +916,11 @@ document.getElementById('l_go').onclick = async ()=>{
     }
     document.getElementById('l_ai_parse').onclick = async ()=>{
       aiStatus.style.display = 'block';
-      aiStatus.textContent = 'Asking Gemini to parse this page…';
+      aiStatus.textContent = 'Asking Gemini to parse this page (verifying via live search)…';
       try{
-        const hint = issuer ? ('The issuer is "'+issuer+'". ') : '';
-        const full = await callGeminiExtract(hint + EXTRACT_PROMPT + data.text.slice(0, 30000), null, aiStatus);
-        applyFullTermsToManualForm(full, (issuer||'IR page')+' ('+url+')');
+        const target = issuer || url;
+        const result = await callGeminiExtractFull(buildExtractPrompt(target, data.text), null, aiStatus);
+        applyFullTermsToManualForm(result.data, (issuer||'IR page')+' ('+url+')', result.sources);
       }catch(e){
         aiStatus.textContent = 'AI parse failed — '+e.message+'. Make sure GEMINI_API_KEY is set in Cloudflare Pages (see SETUP.md), or fall back to the pattern guesses / manual entry.';
       }
