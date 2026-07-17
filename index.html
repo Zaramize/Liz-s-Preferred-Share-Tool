@@ -682,7 +682,8 @@ async function callGeminiExtractOnce(prompt, inlineData){
               : (typeof errObj === 'string' ? errObj : ('gemini proxy http '+resp.status));
     const err = new Error(msg);
     err.status = resp.status;
-    err.transient = resp.status === 503 || resp.status === 429 || /overloaded|high demand|unavailable/i.test(msg);
+    err.transient = resp.status === 503 || /overloaded|high demand|unavailable/i.test(msg);
+    err.quotaExceeded = /exceeded your current quota|quota exceeded/i.test(msg);
     throw err;
   }
   const clean = (data.text||'').replace(/```json|```/g,'').trim();
@@ -802,6 +803,16 @@ function applyFullTermsToManualForm(full, sourceName, sources){
   document.querySelector('.tab[data-tab="manual"]').click();
 }
 
+// Gives a cause-specific message rather than a generic one — quota exhaustion
+// needs different guidance (wait for daily reset) than a missing key or a
+// genuine parse failure (both fixable right now).
+function describeGeminiError(e){
+  if(e.quotaExceeded){
+    return 'Gemini\u2019s free daily quota is used up for now — this resets daily (roughly midnight Pacific time), not something retrying right now will fix. Use pattern guesses or manual entry in the meantime.';
+  }
+  return 'AI parse failed — '+e.message+'. Make sure GEMINI_API_KEY is set in Cloudflare Pages (see SETUP.md), or fall back to the pattern guesses / manual entry.';
+}
+
 document.getElementById('p_go').onclick = async ()=>{
   const fileInput = document.getElementById('p_file');
   const statusEl = document.getElementById('p_status');
@@ -840,7 +851,7 @@ document.getElementById('p_go').onclick = async ()=>{
         const result = await callGeminiExtractFull(buildExtractPrompt(null, text), null, aiStatus);
         applyFullTermsToManualForm(result.data, 'uploaded PDF: '+file.name, result.sources);
       }catch(e){
-        aiStatus.textContent = 'AI parse failed — '+e.message+'. Make sure GEMINI_API_KEY is set in Cloudflare Pages (see SETUP.md), or fall back to the pattern guesses / manual entry.';
+        aiStatus.textContent = describeGeminiError(e);
       }
     };
 
@@ -922,7 +933,7 @@ document.getElementById('l_go').onclick = async ()=>{
         const result = await callGeminiExtractFull(buildExtractPrompt(target, data.text), null, aiStatus);
         applyFullTermsToManualForm(result.data, (issuer||'IR page')+' ('+url+')', result.sources);
       }catch(e){
-        aiStatus.textContent = 'AI parse failed — '+e.message+'. Make sure GEMINI_API_KEY is set in Cloudflare Pages (see SETUP.md), or fall back to the pattern guesses / manual entry.';
+        aiStatus.textContent = describeGeminiError(e);
       }
     };
     statusEl.textContent = 'Page text below — this is the whole page, so scroll to find the specific series you want, then fill in Manual entry yourself.';
