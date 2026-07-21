@@ -349,10 +349,14 @@ function renderRefRates(){
 
 // ---------- price fetching: Yahoo first, Claude API web-search fallback ----------
 function toYahooSymbol(ticker){
-  // ENB.PF.A -> ENB-PF-A.TO
-  return ticker.replace(/\./g,'-') + '.TO';
+    // RY.PR.S -> RY-PS.TO ; ENB.PF.A -> ENB-PFA.TO
+    const parts = ticker.split('.');
+    const base = parts[0];
+    let suffix = parts.slice(1).join('');
+    suffix = suffix.replace(/^PR/, 'P');
+    return base + '-' + suffix + '.TO';
 }
-async function fetchPriceYahoo(ticker){
+  async function fetchPriceYahoo(ticker){
   const sym = toYahooSymbol(ticker);
   const url = '/api/yahoo-quote?symbol='+encodeURIComponent(sym);
   const r = await fetch(url);
