@@ -954,9 +954,22 @@ document.getElementById('l_go').onclick = async ()=>{
     const seriesListEl = document.getElementById('l_series_list');
     if(seriesTickers.length){
         seriesListEl.style.display = 'block';
-    let sHtml = '<div class="src-note" style="margin-bottom:6px;">Series found on this page (' + seriesTickers.length + '):</div>';
+        seriesListEl.innerHTML = '<div class="src-note" style="margin-bottom:6px;">Series found on this page (' + seriesTickers.length + '):</div><div class="loading-txt">Loading series descriptions…</div>';
+        // Look up each ticker's full descriptive name (e.g. "Series 9", "cumulative", rate)
+        // from the TSX symbol directory so multiple series are distinguishable at a glance
+        // instead of just a bare ticker list.
+        let nameByTicker = {};
+        try{
+          const symbols = await ensureTsxSymbols(null);
+          symbols.forEach(s=>{ nameByTicker[s.ticker] = s.name; });
+        }catch(e){ /* directory unavailable — fall back to ticker-only buttons below */ }
+        let sHtml = '<div class="src-note" style="margin-bottom:6px;">Series found on this page (' + seriesTickers.length + '):</div>';
         seriesTickers.forEach(t=>{
-              sHtml += '<button class="ghost" style="margin:3px 6px 3px 0;" data-series-ticker="'+t+'">'+t+' →</button>';
+          const desc = nameByTicker[t];
+          sHtml += '<div class="lres-card" style="margin-bottom:6px;">'+
+            '<div><span class="lres-ticker">'+t+'</span>'+(desc ? ' <span class="lres-desc">'+desc+'</span>' : '')+'</div>'+
+            '<button class="ghost" data-series-ticker="'+t+'">Use →</button>'+
+            '</div>';
         });
         seriesListEl.innerHTML = sHtml;
         seriesListEl.querySelectorAll('[data-series-ticker]').forEach(btn=>{
@@ -1038,17 +1051,17 @@ function renderIssuerSeriesGroups(groups){
     return;
   }
   el.innerHTML = groups.map(g=>{
-    const buttons = g.preferreds.map(p=>{
+    const rows = g.preferreds.map(p=>{
       const already = holdings.some(h => h.ticker === p.ticker);
       const safeIssuer = g.issuerName.replace(/"/g,'&quot;');
-      return '<button class="ghost'+(already?' added':'')+'" data-add-ticker="'+p.ticker+'" data-add-issuer="'+safeIssuer+'" '+
-        (already ? 'disabled' : '') +
-        ' style="margin:4px 6px 4px 0;" title="'+p.name.replace(/"/g,'&quot;')+'">'+
-        p.ticker + (already ? ' ✓ on watchlist' : ' →') + '</button>';
+      return '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border);">'+
+        '<div><span class="lres-ticker">'+p.ticker+'</span> <span class="lres-desc">'+p.name+'</span></div>'+
+        '<button class="ghost'+(already?' added':'')+'" data-add-ticker="'+p.ticker+'" data-add-issuer="'+safeIssuer+'" '+(already?'disabled':'')+' style="white-space:nowrap;">'+(already ? '✓ on watchlist' : 'Use →')+'</button>'+
+        '</div>';
     }).join('');
     return '<div class="lres-card" style="flex-direction:column; align-items:stretch;">'+
       '<div><span class="lres-ticker">'+g.commonTicker+'</span> &nbsp;<span class="lres-desc">'+g.issuerName+' — '+g.preferreds.length+' series outstanding</span></div>'+
-      '<div style="margin-top:8px;">'+buttons+'</div>'+
+      '<div style="margin-top:8px;">'+rows+'</div>'+
       '</div>';
   }).join('');
   el.querySelectorAll('[data-add-ticker]').forEach(btn=>{
