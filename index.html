@@ -176,6 +176,7 @@
       <div class="tab" data-tab="lookup">Look up issuer (IR page)</div>
       <div class="tab" data-tab="pdf">Read prospectus PDF</div>
       <div class="tab" data-tab="import">Import script results</div>
+      <div class="tab" data-tab="allseries">Search issuer (all series)</div>
     </div>
 
     <div id="tab-manual">
@@ -246,6 +247,12 @@
       <div id="i_status" class="loading-txt"></div>
       <div class="src-note" style="margin-top:6px;">Reads the <code>preferred_terms_summary.json</code> file produced by the extractor.py script (run locally against SEDAR+ or manually-downloaded prospectus PDFs). Each entry shows up below for review — click to add to the watchlist.</div>
       <div class="searchresults" id="i_results" style="margin-top:12px;"></div>
+    </div>
+    <div id="tab-allseries" style="display:none;">
+      <div class="form-row"><label>Issuer name</label><input type="text" id="as_query" placeholder="e.g. RBC, Enbridge, Power Corp, Brookfield"></div>
+      <div id="as_status" class="loading-txt"></div>
+      <div class="src-note" style="margin-top:6px;">Searches TSX's public listed-symbol directory for the issuer, then lists every outstanding preferred series found for it (all its .PR. / .PF. tickers) — not just one. Click a series to send its ticker + issuer name into Manual entry; you'll still need to pull its actual dividend terms via the Look-up or PDF tabs before saving.</div>
+      <div id="as_results" style="margin-top:14px; display:flex; flex-direction:column; gap:12px;"></div>
     </div>
   </div>
 
@@ -566,6 +573,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.getElementById('tab-lookup').style.display = t.dataset.tab==='lookup' ? 'block':'none';
     document.getElementById('tab-pdf').style.display = t.dataset.tab==='pdf' ? 'block':'none';
     document.getElementById('tab-import').style.display = t.dataset.tab==='import' ? 'block':'none';
+    document.getElementById('tab-allseries').style.display = t.dataset.tab==='allseries' ? 'block':'none';
   };
 });
 let pendingSource = { url:null, name:null };
@@ -978,6 +986,98 @@ document.getElementById('l_go').onclick = async ()=>{
     statusEl.textContent = 'Could not fetch that page — '+e.message+'. Some sites block server-side fetching; try the Google button to find an alternate source (e.g. a CNW/press-release page instead of the issuer\'s own site).';
   }
 };
+
+// ---------- issuer search: ALL outstanding preferred series (TSX symbol directory) ----------
+// Unlike the single-URL "Look up issuer" tab above, this pulls TSX's full public
+// symbol directory (via /api/tsx-symbols, which fetches it server-side) and lets
+// the user search any issuer by name to see every outstanding series at once,
+// not just whatever a single IR page happened to list.
+
+let tsxSymbolsCache = null; // [{ticker, name, exchange}, ...] once loaded
+
+async function ensureTsxSymbols(statusEl){
+  if(tsxSymbolsCache) return tsxSymbolsCache;
+  if(statusEl) statusEl.textContent = 'Loading TSX symbol directory (first search only, then cached)…';
+  const r = await fetch('/api/tsx-symbols');
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.error || ('http '+r.status));
+  tsxSymbolsCache = d.symbols;
+  if(statusEl) statusEl.textContent = '';
+  return tsxSymbolsCache;
+}
+
+function isPreferredTicker(ticker){
+  return /\.(PR|PF)\.[A-Z0-9]+$/.test(ticker);
+}
+
+// Groups matching common-share issuers with all of their preferred series
+// (matched by shared base ticker, e.g. ENB -> ENB.PF.A, ENB.PR.B, ...).
+function findIssuerPreferredGroups(symbols, query){
+  const q = query.trim().toLowerCase();
+  if(q.length < 2) return [];
+  const commonMatches = symbols.filter(s =>
+    !isPreferredTicker(s.ticker) &&
+    (s.name.toLowerCase().includes(q) || s.ticker.toLowerCase() === q)
+  );
+  const seenBase = new Set();
+  const groups = [];
+  commonMatches.forEach(common=>{
+    const base = common.ticker.split('.')[0];
+    if(seenBase.has(base)) return;
+    seenBase.add(base);
+    const preferreds = symbols.filter(s => isPreferredTicker(s.ticker) && s.ticker.split('.')[0] === base);
+    if(preferreds.length) groups.push({ commonTicker: common.ticker, issuerName: common.name, preferreds });
+  });
+  return groups.slice(0, 15); // keep results manageable for a live-typing search
+}
+
+function renderIssuerSeriesGroups(groups){
+  const el = document.getElementById('as_results');
+  if(!groups.length){
+    el.innerHTML = '<div class="src-note">No matching issuer with outstanding preferred series found. Try the exact common-share ticker (e.g. "ENB") or a shorter name fragment.</div>';
+    return;
+  }
+  el.innerHTML = groups.map(g=>{
+    const buttons = g.preferreds.map(p=>{
+      const already = holdings.some(h => h.ticker === p.ticker);
+      const safeIssuer = g.issuerName.replace(/"/g,'&quot;');
+      return '<button class="ghost'+(already?' added':'')+'" data-add-ticker="'+p.ticker+'" data-add-issuer="'+safeIssuer+'" '+
+        (already ? 'disabled' : '') +
+        ' style="margin:4px 6px 4px 0;" title="'+p.name.replace(/"/g,'&quot;')+'">'+
+        p.ticker + (already ? ' ✓ on watchlist' : ' →') + '</button>';
+    }).join('');
+    return '<div class="lres-card" style="flex-direction:column; align-items:stretch;">'+
+      '<div><span class="lres-ticker">'+g.commonTicker+'</span> &nbsp;<span class="lres-desc">'+g.issuerName+' — '+g.preferreds.length+' series outstanding</span></div>'+
+      '<div style="margin-top:8px;">'+buttons+'</div>'+
+      '</div>';
+  }).join('');
+  el.querySelectorAll('[data-add-ticker]').forEach(btn=>{
+    btn.onclick = ()=>{
+      document.querySelector('.tab[data-tab="manual"]').click();
+      document.getElementById('m_ticker').value = btn.dataset.addTicker;
+      document.getElementById('m_issuer').value = btn.dataset.addIssuer;
+      document.getElementById('m_rate').focus();
+    };
+  });
+}
+
+let asSearchDebounce = null;
+document.getElementById('as_query').addEventListener('input', (e)=>{
+  clearTimeout(asSearchDebounce);
+  const query = e.target.value;
+  asSearchDebounce = setTimeout(async ()=>{
+    const statusEl = document.getElementById('as_status');
+    const resultsEl = document.getElementById('as_results');
+    if(query.trim().length < 2){ resultsEl.innerHTML=''; statusEl.textContent=''; return; }
+    try{
+      const symbols = await ensureTsxSymbols(statusEl);
+      const groups = findIssuerPreferredGroups(symbols, query);
+      renderIssuerSeriesGroups(groups);
+    }catch(err){
+      statusEl.textContent = 'Could not load the TSX symbol directory — '+err.message;
+    }
+  }, 300);
+});
 
 // ---------- import from extractor.py JSON output ----------
 function readFileAsText(file){
