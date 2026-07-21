@@ -209,6 +209,7 @@
         <datalist id="l_issuer_list"></datalist>
       </div>
       <div class="form-row"><label>IR page URL</label><input type="text" id="l_url" placeholder="Auto-fills for known issuers, or paste any URL"></div>
+      <div id="l_url_note" class="src-note" style="display:none; color:var(--amber); margin-bottom:6px;"></div>
       <div class="form-row"><label></label>
         <div style="display:flex; gap:8px;">
           <button class="primary" id="l_go">Fetch &amp; read page</button>
@@ -251,7 +252,7 @@
     <div id="tab-allseries" style="display:none;">
       <div class="form-row"><label>Issuer name</label><input type="text" id="as_query" placeholder="e.g. RBC, Enbridge, Power Corp, Brookfield"></div>
       <div id="as_status" class="loading-txt"></div>
-      <div class="src-note" style="margin-top:6px;">Searches TSX's public listed-symbol directory for the issuer, then lists every outstanding preferred series found for it (all its .PR. / .PF. tickers) — not just one. Each row shows a live price; click <b>✨ What is this?</b> to have Gemini identify that specific series' rate/type/reset date via live search (free, uses your Gemini key) before you decide which to add. Click <b>Use →</b> to send a series into Manual entry — if you already ran "What is this?" on it, those terms come along too.</div>
+      <div class="src-note" style="margin-top:6px;">Searches TSX's public listed-symbol directory for the issuer, then lists every outstanding preferred series found for it (all its .PR. / .PF. tickers) — not just one. Each row shows a live price. Click <b>✨ What is this?</b> or <b>Use →</b> to fetch the issuer's actual investor-relations page and have Gemini extract that specific series' rate/type/reset date from it (free, uses your Gemini key) — currently only works for issuers seeded in <code>KNOWN_ISSUERS</code> (Enbridge, RBC, CIBC, TD, BMO so far); for others it'll tell you to add a URL via the "Look up issuer" tab instead. Gemini has no live web search here, so it only ever reads the actual page fetched — never guesses from memory.</div>
       <div id="as_results" style="margin-top:14px; display:flex; flex-direction:column; gap:12px;"></div>
     </div>
   </div>
@@ -768,26 +769,26 @@ async function callGeminiExtractFull(prompt, inlineData, statusEl){
 // page listing many series at once, which is exactly what caused a wrong
 // series' numbers getting picked before. Search results and issuer press
 // releases should win over the pasted TEXT if they disagree.
+// IMPORTANT: this proxy's backend (gemini-proxy.js) does NOT enable Google
+// Search grounding (that quota requires billing on the Google Cloud project,
+// and was deliberately left off — see the comment at the top of that file).
+// So this prompt must never claim the model can search the web — it can only
+// extract from whatever TEXT is actually passed in. Getting an official
+// source means the CALLER fetched an official page/PDF and passed its text
+// here; this function has no way to go find one itself.
 function buildExtractPrompt(targetHint, text){
-  return 'You are extracting the CURRENT contractual dividend terms of a specific Canadian preferred share.\n'+
-    (targetHint
-      ? 'The specific security to extract terms for is: '+targetHint+'. Use Google Search to find its terms directly. '+
-        'Search in this priority order and stop as soon as you find a source in a higher tier: '+
-        '(1) the issuer\'s own investor-relations website (its official domain, e.g. a "preferred shares" or "capital securities" page under investor relations), '+
-        '(2) the issuer\'s own press release announcing the rate/reset (distributed via CNW, Business Wire, or GlobeNewswire, but authored by the issuer), '+
-        '(3) the original prospectus or prospectus supplement (SEDAR+ or the issuer\'s site). '+
-        'Only fall back to third-party aggregators, data providers, or forums (e.g. preferred-share tracking sites, brokerage pages) if none of tiers 1-3 turn up anything, and if you do, treat that result as lower-confidence. '+
-        'Prefer tier 1-3 sources over the pasted TEXT below if they disagree, since the TEXT may be a page listing many different series and the wrong one could easily get picked.'
-      : 'Identify the specific series from the TEXT below, then use Google Search to verify its terms — prioritize the '+
-        'issuer\'s own investor-relations page, then its own press release, then the prospectus, before trusting the TEXT alone or any third-party aggregator.'
-    )+'\n\n'+
-    'Reply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
+  return 'You are extracting the CURRENT contractual dividend terms of a specific Canadian preferred share, '+
+    'from the TEXT below ONLY. You have no live internet access — do not rely on prior knowledge of this '+
+    'security\'s terms, since rates and reset dates change over time and you cannot verify anything against '+
+    'the present. If the TEXT does not clearly state a value, return null for that field rather than guessing '+
+    'or recalling a plausible-sounding number from training.\n'+
+    (targetHint ? 'The specific security to extract terms for is: '+targetHint+'. The TEXT may describe several '+
+      'different series at once — only extract values that are clearly attributed to '+targetHint+' specifically. '+
+      'If you cannot find '+targetHint+' described in the TEXT at all, return null for every field.\n' : '')+
+    '\nReply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
     '{"ticker":"TSX ticker like ENB.PF.A if stated, else null","issuer":"issuer legal name or null","seriesName":"e.g. Cumulative Redeemable Preference Shares, Series 9, or null","type":"reset|floating|perpetual or null","par":25.00,'+
-    '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true or false or null,"convertsTo":"short description or null",'+
-    '"sourceType":"issuer_ir|press_release|prospectus|third_party|null — which tier the winning source fell into"}. '+
-    (targetHint ? 'If you cannot confidently verify terms specifically for '+targetHint+' from ANY tier, return null for every field rather than guessing from an unrelated series. ' : '')+
-    'Use null for anything not clearly stated rather than guessing.\n\nTEXT (context only — verify against live search before trusting this):\n'+
-    text.slice(0, 30000);
+    '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true or false or null,"convertsTo":"short description or null"}.\n\n'+
+    'TEXT:\n'+text.slice(0, 30000);
 }
 
 // Fuller prefill (all fields, not just the regex guess subset) for AI-extracted terms.
@@ -806,15 +807,16 @@ function sanityCheckTerms(full){
     const d = new Date(full.nextResetDate+'T00:00:00');
     if(isNaN(d.getTime())) warnings.push('Next reset date "'+full.nextResetDate+'" doesn\'t look like a valid date.');
   }
-  if(full.sourceType === 'third_party'){
-    warnings.push('Could not confirm this against the issuer\'s own IR page, press release, or prospectus — the best source found was a third-party site. Verify directly with the issuer before trusting these numbers.');
-  }
   return warnings;
 }
+// sourceType is set by whichever caller fetched the TEXT that got passed to
+// Gemini — NOT reported by the model itself. Gemini has no live search here
+// (see the note above buildExtractPrompt), so it can't verify its own source;
+// only the code that actually fetched the page/PDF knows where it came from.
 function sourceTypeLabel(t){
-  return { issuer_ir:'issuer IR page', press_release:'issuer press release', prospectus:'prospectus', third_party:'third-party source (unconfirmed)' }[t] || null;
+  return { issuer_ir:'issuer IR page', prospectus_pdf:'uploaded PDF', pasted_page:'fetched page (unverified official-ness)' }[t] || null;
 }
-function applyFullTermsToManualForm(full, sourceName, sources){
+function applyFullTermsToManualForm(full, sourceName, sourceType, sourceUrl){
   if(full.ticker) document.getElementById('m_ticker').value = full.ticker;
   if(full.issuer) document.getElementById('m_issuer').value = full.issuer;
   if(full.seriesName) document.getElementById('m_series').value = full.seriesName;
@@ -824,18 +826,18 @@ function applyFullTermsToManualForm(full, sourceName, sources){
   if(full.spreadBps!=null) document.getElementById('m_spread').value = full.spreadBps;
   if(full.nextResetDate) document.getElementById('m_resetdate').value = full.nextResetDate;
   if(full.cumulative!=null) document.getElementById('m_cumulative').value = full.cumulative ? 'yes':'no';
-  pendingSource = { url:null, name:sourceName+' (AI-parsed via Gemini)' };
+  pendingSource = { url:sourceUrl||null, name:sourceName+' (AI-parsed via Gemini from the actual fetched text)' };
   const noteEl = document.getElementById('m_source_note');
   noteEl.style.display = 'block';
   const warnings = sanityCheckTerms(full);
-  const typeLabel = sourceTypeLabel(full.sourceType);
-  const sourceLinks = (sources||[]).length
-    ? '<br>Verified against'+(typeLabel ? ' ('+typeLabel+')' : '')+': '+sources.map(s=>'<a href="'+s.uri+'" target="_blank" rel="noopener" style="color:var(--teal);">'+ (s.title||s.uri) +'</a>').join(', ')
-    : '<br><span style="color:var(--amber);">No live search sources came back — this may be based on the pasted text alone. Verify carefully.</span>';
+  const typeLabel = sourceTypeLabel(sourceType);
+  const sourceHtml = sourceUrl
+    ? '<br>Extracted from'+(typeLabel ? ' ('+typeLabel+')' : '')+': <a href="'+sourceUrl+'" target="_blank" rel="noopener" style="color:var(--teal);">'+sourceUrl+'</a>'
+    : '<br><span style="color:var(--amber);">No source URL recorded for this extraction — verify the numbers manually.</span>';
   const warningHtml = warnings.length
     ? '<br><span style="color:var(--red);">⚠ '+warnings.join(' ')+'</span>'
     : '';
-  noteEl.innerHTML = 'Fields prefilled by Gemini from '+sourceName+' — still review each value before saving, especially if the source covered multiple series.'+sourceLinks+warningHtml;
+  noteEl.innerHTML = 'Fields prefilled by Gemini from '+sourceName+' — Gemini has no live internet access, so this is a text-extraction of whatever page/PDF was actually fetched, not a verified web search. Still review each value before saving.'+sourceHtml+warningHtml;
   document.querySelector('.tab[data-tab="manual"]').click();
 }
 
@@ -882,10 +884,10 @@ document.getElementById('p_go').onclick = async ()=>{
     }
     document.getElementById('p_ai_parse').onclick = async ()=>{
       aiStatus.style.display = 'block';
-      aiStatus.textContent = 'Asking Gemini to parse this text (verifying via live search)…';
+      aiStatus.textContent = 'Asking Gemini to extract terms from this PDF\'s text…';
       try{
         const result = await callGeminiExtractFull(buildExtractPrompt(null, text), null, aiStatus);
-        applyFullTermsToManualForm(result.data, 'uploaded PDF: '+file.name, result.sources);
+        applyFullTermsToManualForm(result.data, 'uploaded PDF: '+file.name, 'prospectus_pdf', null);
       }catch(e){
         aiStatus.textContent = describeGeminiError(e);
       }
@@ -899,14 +901,47 @@ document.getElementById('p_go').onclick = async ()=>{
 };
 
 // ---------- issuer IR page lookup (free — curated URL list + server-side fetch, no AI) ----------
-// Only a handful of major issuers are seeded here with a verified IR URL.
-// Add more by appending { name, url } — the array only stores what you tell it to.
+// Each issuer is seeded with a verified URL. Most point to a page dedicated
+// specifically to preferred shares/terms (no `note` field). A few issuers
+// don't have a dedicated preferred-share page on their site at all — those
+// carry a `note` explaining what the URL actually is, which gets surfaced to
+// the user wherever that issuer's terms are shown, so it's clear the source
+// is weaker than the norm before trusting anything extracted from it.
+// Add more by appending { name, aliases, tickerPrefixes, url, note? }.
 const KNOWN_ISSUERS = [
   { name: 'Enbridge Inc.', aliases: ['enbridge', 'enb'], tickerPrefixes: ['ENB'], url: 'https://www.enbridge.com/investment-center/stock-and-dividend-information/preferred-hybrid-shares' },
   { name: 'Royal Bank of Canada', aliases: ['rbc', 'royal bank', 'ry'], tickerPrefixes: ['RY'], url: 'https://www.rbc.com/investor-relations/share-information.html' },
   { name: 'Canadian Imperial Bank of Commerce', aliases: ['cibc', 'canadian imperial bank of commerce', 'cm'], tickerPrefixes: ['CM'], url: 'https://www.cibc.com/en/about-cibc/investor-relations/share-information/preferred-shares.html' },
   { name: 'Toronto-Dominion Bank', aliases: ['td', 'td bank', 'toronto-dominion'], tickerPrefixes: ['TD'], url: 'https://www.td.com/ca/en/about-td/for-investors/investor-relations/share-information/preferred-shares' },
-  { name: 'Bank of Montreal', aliases: ['bmo', 'bank of montreal'], tickerPrefixes: ['BMO'], url: 'https://www.bmo.com/main/about-bmo/investor-relations/shareholder-information/preferred-shares' }
+  { name: 'Bank of Montreal', aliases: ['bmo', 'bank of montreal'], tickerPrefixes: ['BMO'], url: 'https://www.bmo.com/main/about-bmo/investor-relations/shareholder-information/preferred-shares' },
+  { name: 'National Bank of Canada', aliases: ['national bank', 'nbc', 'na'], tickerPrefixes: ['NA'], url: 'https://www.nbc.ca/about-us/investors/capital-debt/shares.html' },
+  { name: 'Manulife Financial Corporation', aliases: ['manulife', 'mfc'], tickerPrefixes: ['MFC'], url: 'https://www.manulife.com/ca/en/about-us/investors/shareholder-services/preferred-shares.html' },
+  { name: 'Great-West Lifeco Inc.', aliases: ['great-west lifeco', 'great west lifeco', 'gwo'], tickerPrefixes: ['GWO'], url: 'https://www.greatwestlifeco.com/investor-relations/share-information/preferred-share-information-and-redemptions.html' },
+  { name: 'Intact Financial Corporation', aliases: ['intact', 'intact financial', 'ifc'], tickerPrefixes: ['IFC'], url: 'https://www.intactfc.com/investors/preferred-shares' },
+  { name: 'BCE Inc.', aliases: ['bce', 'bell'], tickerPrefixes: ['BCE'], url: 'https://www.bce.ca/investors/shares-and-dividends/preferred-shares' },
+  { name: 'TC Energy Corporation', aliases: ['tc energy', 'transcanada', 'trp'], tickerPrefixes: ['TRP'], url: 'https://www.tcenergy.com/investors/stock-information/' },
+  { name: 'Pembina Pipeline Corporation', aliases: ['pembina', 'ppl'], tickerPrefixes: ['PPL'], url: 'https://www.pembina.com/investors/stock-dividend' },
+  { name: 'Power Corporation of Canada', aliases: ['power corporation', 'power corp', 'pow'], tickerPrefixes: ['POW'], url: 'https://www.powercorporation.com/en/investors/stock-information/' },
+  { name: 'Power Financial Corporation', aliases: ['power financial', 'pwf'], tickerPrefixes: ['PWF'], url: 'https://www.powerfinancial.com/en/investors/stock-information/' },
+  { name: 'TransAlta Corporation', aliases: ['transalta', 'ta'], tickerPrefixes: ['TA'], url: 'https://transalta.com/investors/investor-information' },
+  { name: 'AltaGas Ltd.', aliases: ['altagas', 'ala'], tickerPrefixes: ['ALA'], url: 'https://www.altagas.ca/invest/share-information/preferred-shares' },
+  { name: 'Capital Power Corporation', aliases: ['capital power', 'cpx'], tickerPrefixes: ['CPX'], url: 'https://www.capitalpower.com/investors/preferred-share-information/' },
+  { name: 'Emera Incorporated', aliases: ['emera', 'ema'], tickerPrefixes: ['EMA'], url: 'https://investors.emera.com/shareholder-info/preferred-shares/default.aspx' },
+  { name: 'Fortis Inc.', aliases: ['fortis', 'fts'], tickerPrefixes: ['FTS'], url: 'https://www.fortisinc.com/investors/share-information/index' },
+  { name: 'Canadian Utilities Limited', aliases: ['canadian utilities', 'cu', 'atco'], tickerPrefixes: ['CU'], url: 'https://www.canadianutilities.com/en-ca/investors/preferred-shares.html' },
+  { name: 'Northland Power Inc.', aliases: ['northland power', 'npi'], tickerPrefixes: ['NPI'], url: 'https://www.northlandpower.com/en/investor-centre/stock-quote.aspx' },
+  { name: 'Brookfield Corporation', aliases: ['brookfield', 'brookfield corporation', 'bn'], tickerPrefixes: ['BN'], url: 'https://bn.brookfield.com/stock-distributions/preferred-shares' },
+  { name: 'Brookfield Renewable Partners L.P.', aliases: ['brookfield renewable', 'bep', 'brf'], tickerPrefixes: ['BEP', 'BRF'], url: 'https://bep.brookfield.com/bep/stock-information/preferred-securities' },
+  { name: 'Canaccord Genuity Group Inc.', aliases: ['canaccord', 'canaccord genuity', 'cf'], tickerPrefixes: ['CF'], url: 'https://www.canaccordgenuity.com/investor-relations/investor-resources/preferred-shares-convertible-debentures/' },
+  { name: 'Bombardier Inc.', aliases: ['bombardier', 'bbd'], tickerPrefixes: ['BBD'], url: 'https://bombardier.com/en/investors/shares-dividends' },
+  { name: 'Aimia Inc.', aliases: ['aimia', 'aim'], tickerPrefixes: ['AIM'], url: 'https://www.aimia.com/investor-relations/shareholder-information/' },
+  { name: 'George Weston Limited', aliases: ['george weston', 'weston', 'wn'], tickerPrefixes: ['WN'], url: 'https://www.weston.ca/investors/shareholder-information' },
+  { name: 'Laurentian Bank of Canada', aliases: ['laurentian bank', 'lb'], tickerPrefixes: ['LB'], url: 'https://www.laurentianbank.ca/en/about_lbc/my_investment/preferred_shares.html' },
+  { name: 'Sun Life Financial Inc.', aliases: ['sun life', 'slf'], tickerPrefixes: ['SLF'], url: 'https://www.sunlife.com/en/investors/shareholder-services/', note: 'General shareholder-services FAQ page — not preferred-share-specific. Terms extracted from it may be incomplete.' },
+  { name: 'Fairfax Financial Holdings Limited', aliases: ['fairfax', 'ffh'], tickerPrefixes: ['FFH'], url: 'https://www.fairfax.ca/news/', note: 'Fairfax has no dedicated preferred-share page — this is their press-release feed, which usually covers only the most recent series activity, not all outstanding series.' },
+  { name: 'Algonquin Power & Utilities Corp.', aliases: ['algonquin', 'algonquin power', 'aqn'], tickerPrefixes: ['AQN'], url: 'https://algonquinpower.com/investors.html', note: 'General investor-relations landing page — no dedicated preferred-share subpage was found.' },
+  { name: 'Brookfield Infrastructure Partners L.P.', aliases: ['brookfield infrastructure', 'bip'], tickerPrefixes: ['BIP'], url: 'https://bip.brookfield.com', note: 'General investor-relations landing page — no dedicated preferred-unit subpage was confirmed.' },
+  { name: 'Thomson Reuters Corporation', aliases: ['thomson reuters', 'tri'], tickerPrefixes: ['TRI'], url: 'https://ir.thomsonreuters.com/', note: 'General investor-relations landing page — Thomson Reuters has only one preferred series outstanding (TRI.PR.B) and no dedicated preferred-share subpage was found.' }
   ];
   (function populateIssuerList(){
   const dl = document.getElementById('l_issuer_list');
@@ -924,7 +959,14 @@ document.getElementById('l_issuer').addEventListener('input', (e)=>{
     (i.aliases||[]).includes(v) ||
     (tickerPrefix && (i.tickerPrefixes||[]).some(p => p.toLowerCase()===tickerPrefix.toLowerCase()))
   );
-  if(match) document.getElementById('l_url').value = match.url;
+  const noteEl = document.getElementById('l_url_note');
+  if(match){
+    document.getElementById('l_url').value = match.url;
+    if(match.note){ noteEl.style.display = 'block'; noteEl.textContent = '⚠ '+match.note; }
+    else { noteEl.style.display = 'none'; noteEl.textContent = ''; }
+  } else {
+    noteEl.style.display = 'none'; noteEl.textContent = '';
+  }
 });
 document.getElementById('l_google').onclick = ()=>{
   const issuer = document.getElementById('l_issuer').value.trim();
@@ -1001,11 +1043,12 @@ document.getElementById('l_go').onclick = async ()=>{
     }
     document.getElementById('l_ai_parse').onclick = async ()=>{
       aiStatus.style.display = 'block';
-      aiStatus.textContent = 'Asking Gemini to parse this page (verifying via live search)…';
+      aiStatus.textContent = 'Asking Gemini to extract terms from this page\'s text…';
       try{
         const target = issuer || url;
         const result = await callGeminiExtractFull(buildExtractPrompt(target, data.text), null, aiStatus);
-        applyFullTermsToManualForm(result.data, (issuer||'IR page')+' ('+url+')', result.sources);
+        const isKnownOfficialUrl = issuerMatch && issuerMatch.url === url;
+        applyFullTermsToManualForm(result.data, (issuer||'IR page')+' ('+url+')', isKnownOfficialUrl ? 'issuer_ir' : 'pasted_page', url);
       }catch(e){
         aiStatus.textContent = describeGeminiError(e);
       }
@@ -1062,10 +1105,48 @@ function findIssuerPreferredGroups(symbols, query){
 
 function tickerToElId(ticker){ return ticker.replace(/[^A-Za-z0-9]/g,'_'); }
 
-// Cache Gemini-parsed terms and live prices per ticker for the lifetime of the
-// page — avoids re-fetching if the user re-types the same issuer search.
-let asTermsCache = {};
-let asPriceCache = {};
+// Caches for the lifetime of the page — avoid re-fetching/re-parsing if the
+// user re-types the same issuer search or clicks the same series twice.
+let asTermsCache = {};   // ticker -> { data, sourceType, sourceUrl } | { error }
+let asPriceCache = {};   // ticker -> price | null
+let irPageTextCache = {}; // issuer name -> fetched page text (shared across all of that issuer's series)
+
+// Fetches the issuer's real IR page (only issuers in KNOWN_ISSUERS have one on
+// file) and asks Gemini to extract THIS specific ticker's terms from that real
+// text — this is the only honest way to get "official source" data, since
+// gemini-proxy.js has no live web search (see the note above buildExtractPrompt).
+// Returns { data, sourceType:'issuer_ir', sourceUrl } on success, or
+// { error } if there's no known IR URL for this issuer or the fetch/parse failed.
+async function fetchOfficialTermsForTicker(ticker, issuerName){
+  if(asTermsCache[ticker]) return asTermsCache[ticker];
+  const base = ticker.split('.')[0];
+  const issuerMatch = KNOWN_ISSUERS.find(i => (i.tickerPrefixes||[]).includes(base));
+  if(!issuerMatch){
+    const result = { error: 'No investor-relations URL on file for '+(issuerName||base)+' yet. Use the "Look up issuer (IR page)" tab to paste one (via the Google-search button), or add it to KNOWN_ISSUERS in the code.' };
+    asTermsCache[ticker] = result;
+    return result;
+  }
+  try{
+    let pageText = irPageTextCache[issuerMatch.name];
+    if(!pageText){
+      const resp = await fetch('/api/fetch-page?url='+encodeURIComponent(issuerMatch.url));
+      const pageData = await resp.json();
+      if(!resp.ok) throw new Error(pageData.error || ('http '+resp.status));
+      if(!pageData.text || !pageData.text.trim()) throw new Error('page returned no readable text');
+      pageText = pageData.text;
+      irPageTextCache[issuerMatch.name] = pageText;
+    }
+    const geminiResult = await callGeminiExtractFull(buildExtractPrompt(ticker, pageText), null, null);
+    const result = { data: geminiResult.data, sourceType: 'issuer_ir', sourceUrl: issuerMatch.url, note: issuerMatch.note || null };
+    asTermsCache[ticker] = result;
+    return result;
+  }catch(e){
+    const msg = (e.quotaExceeded !== undefined || e.transient !== undefined) ? describeGeminiError(e) : e.message;
+    const result = { error: 'Could not fetch/parse '+issuerMatch.name+'\'s IR page ('+issuerMatch.url+') — '+msg };
+    asTermsCache[ticker] = result;
+    return result;
+  }
+}
 
 function renderIssuerSeriesGroups(groups){
   const el = document.getElementById('as_results');
@@ -1083,7 +1164,7 @@ function renderIssuerSeriesGroups(groups){
           '<div><span class="lres-ticker">'+p.ticker+'</span> <span class="lres-desc">'+p.name+'</span></div>'+
           '<div style="display:flex; gap:6px; align-items:center; white-space:nowrap;">'+
             '<span id="as-price-'+elId+'" class="src-note">price …</span>'+
-            '<button class="ghost" data-ai-ticker="'+p.ticker+'" id="as-aibtn-'+elId+'">✨ What is this?</button>'+
+            '<button class="ghost" data-ai-ticker="'+p.ticker+'" data-ai-issuer="'+safeIssuer+'" id="as-aibtn-'+elId+'">✨ What is this?</button>'+
             '<button class="ghost'+(already?' added':'')+'" data-add-ticker="'+p.ticker+'" data-add-issuer="'+safeIssuer+'" '+(already?'disabled':'')+'>'+(already ? '✓ on watchlist' : 'Use →')+'</button>'+
           '</div>'+
         '</div>'+
@@ -1096,19 +1177,36 @@ function renderIssuerSeriesGroups(groups){
       '</div>';
   }).join('');
 
+  // "Use →" now auto-runs the real IR-page lookup if it hasn't been done yet for
+  // this ticker, instead of silently sending an empty form (the earlier bug) —
+  // it shows a spinner in place of the button while that happens.
   el.querySelectorAll('[data-add-ticker]').forEach(btn=>{
-    btn.onclick = ()=>{
+    btn.onclick = async ()=>{
+      const ticker = btn.dataset.addTicker;
+      const issuerName = btn.dataset.addIssuer;
+      const elId = tickerToElId(ticker);
+      const termsEl = document.getElementById('as-terms-'+elId);
+      const originalLabel = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Fetching terms…';
+      const result = await fetchOfficialTermsForTicker(ticker, issuerName);
+      btn.disabled = false; btn.textContent = originalLabel;
       document.querySelector('.tab[data-tab="manual"]').click();
-      document.getElementById('m_ticker').value = btn.dataset.addTicker;
-      document.getElementById('m_issuer').value = btn.dataset.addIssuer;
-      // If this series was already AI-summarized in the search results, carry
-      // those terms straight into the form instead of making the user retype them.
-      const cached = asTermsCache[btn.dataset.addTicker];
-      if(cached && cached.data){
-        applyFullTermsToManualForm(cached.data, 'issuer search: AI-parsed for '+btn.dataset.addTicker, cached.sources);
+      document.getElementById('m_ticker').value = ticker;
+      document.getElementById('m_issuer').value = issuerName;
+      if(result.data){
+        applyFullTermsToManualForm(result.data, 'issuer search: '+ticker, result.sourceType, result.sourceUrl);
+        if(result.note){
+          const noteEl = document.getElementById('m_source_note');
+          noteEl.innerHTML += '<br><span style="color:var(--amber);">⚠ '+result.note+'</span>';
+        }
       } else {
+        const noteEl = document.getElementById('m_source_note');
+        noteEl.style.display = 'block';
+        noteEl.innerHTML = '<span style="color:var(--amber);">'+(result.error||'Could not auto-fetch terms')+' — fill in the rate/spread/dates yourself below.</span>';
+        pendingSource = { url:null, name:'manual entry' };
         document.getElementById('m_rate').focus();
       }
+      if(termsEl){ termsEl.style.display='block'; termsEl.innerHTML = summarizeTermsLine(result.data, result.sourceType, result.sourceUrl, result.error); }
     };
   });
 
@@ -1133,42 +1231,40 @@ function renderIssuerSeriesGroups(groups){
     }
   });
 
-  // On-demand AI summary per series ("What is this?") — calls Gemini with just
-  // the ticker as the target and live search grounding, no IR page scrape needed.
+  // "What is this?" — fetches the real IR page (if known) and extracts just
+  // this series' terms from it, showing the result + real source link inline.
   el.querySelectorAll('[data-ai-ticker]').forEach(btn=>{
     btn.onclick = async ()=>{
       const ticker = btn.dataset.aiTicker;
+      const issuerName = btn.dataset.aiIssuer;
       const elId = tickerToElId(ticker);
       const termsEl = document.getElementById('as-terms-'+elId);
+      termsEl.style.display = 'block';
       if(asTermsCache[ticker]){
-        termsEl.style.display = 'block';
-        termsEl.innerHTML = summarizeTermsLine(asTermsCache[ticker].data, asTermsCache[ticker].sources);
+        const c = asTermsCache[ticker];
+        termsEl.innerHTML = summarizeTermsLine(c.data, c.sourceType, c.sourceUrl, c.error, c.note);
         return;
       }
       btn.disabled = true;
-      termsEl.style.display = 'block';
-      termsEl.textContent = 'Asking Gemini (live search)…';
-      try{
-        const result = await callGeminiExtractFull(buildExtractPrompt(ticker, ''), null, termsEl);
-        asTermsCache[ticker] = result;
-        termsEl.innerHTML = summarizeTermsLine(result.data, result.sources);
-      }catch(e){
-        termsEl.textContent = describeGeminiError(e);
-      }finally{
-        btn.disabled = false;
-      }
+      termsEl.textContent = 'Fetching the issuer\'s IR page and extracting terms…';
+      const result = await fetchOfficialTermsForTicker(ticker, issuerName);
+      termsEl.innerHTML = summarizeTermsLine(result.data, result.sourceType, result.sourceUrl, result.error, result.note);
+      btn.disabled = false;
     };
   });
 }
 
-// One-line human summary of AI-extracted terms for the issuer-search results
-// (a lighter-weight version of applyFullTermsToManualForm's note, for browsing
-// rather than committing to the form). Always surfaces where the numbers came
-// from — an official issuer source vs. an unconfirmed third-party one matters
-// more here than the numbers themselves, since this is the pick-a-series stage.
-function summarizeTermsLine(full, sources){
+// One-line human summary for the issuer-search results (a lighter-weight
+// version of applyFullTermsToManualForm's note, for browsing rather than
+// committing to the form). sourceType/sourceUrl/note are caller-supplied
+// (from fetchOfficialTermsForTicker) — Gemini has no live search here, so it
+// can never self-report where a number came from; only the fetch code knows.
+function summarizeTermsLine(full, sourceType, sourceUrl, error, note){
+  if(error){
+    return '<span style="color:var(--amber);">⚠ '+error+'</span>';
+  }
   if(!full || (full.currentRate==null && full.type==null)){
-    return '⚠ Could not confidently identify this series\' terms from an official source — verify manually.';
+    return '⚠ Fetched the issuer\'s IR page but couldn\'t find this specific series clearly described in it — verify manually.'+(note?'<br><span style="color:var(--amber);">⚠ '+note+'</span>':'');
   }
   const bits = [];
   if(full.currentRate!=null) bits.push(full.currentRate+'%');
@@ -1176,13 +1272,12 @@ function summarizeTermsLine(full, sources){
   if(full.spreadBps!=null) bits.push('+'+(full.spreadBps/100).toFixed(2)+'% spread');
   if(full.nextResetDate) bits.push('next reset '+full.nextResetDate);
   if(full.cumulative!=null) bits.push(full.cumulative ? 'cumulative' : 'non-cumulative');
-  const typeLabel = sourceTypeLabel(full.sourceType);
-  const isOfficial = full.sourceType==='issuer_ir' || full.sourceType==='press_release' || full.sourceType==='prospectus';
-  const sourceHtml = (sources||[]).length
-    ? ' · <span style="color:'+(isOfficial?'var(--teal)':'var(--amber)')+';">source: '+(typeLabel||'unlabeled')+'</span> ('+
-      sources.slice(0,2).map(s=>'<a href="'+s.uri+'" target="_blank" rel="noopener" style="color:var(--teal);">'+(s.title||'link')+'</a>').join(', ')+')'
-    : ' · <span style="color:var(--amber);">no source link returned — verify manually</span>';
-  return bits.join(' · ') + sourceHtml;
+  const typeLabel = sourceTypeLabel(sourceType);
+  const sourceHtml = sourceUrl
+    ? ' · <span style="color:var(--teal);">source: '+(typeLabel||'page')+'</span> (<a href="'+sourceUrl+'" target="_blank" rel="noopener" style="color:var(--teal);">'+sourceUrl+'</a>)'
+    : ' · <span style="color:var(--amber);">no source URL — verify manually</span>';
+  const noteHtml = note ? '<br><span style="color:var(--amber);">⚠ '+note+'</span>' : '';
+  return bits.join(' · ') + sourceHtml + noteHtml;
 }
 
 let asSearchDebounce = null;
