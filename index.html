@@ -975,13 +975,20 @@ function buildExtractPrompt(targetHint, text){
     'security\'s terms, since rates and reset dates change over time and you cannot verify anything against '+
     'the present. If the TEXT does not clearly state a value, return null for that field rather than guessing '+
     'or recalling a plausible-sounding number from training.\n'+
+    'The TEXT was converted from HTML — table cells are separated with " | " and rows are on their own line, '+
+    'so if you see a dense line of " | "-separated values, treat each run between pipes as one table cell '+
+    '(e.g. a row might read "ENB.PR.J | Series 7 | 5-yr GoC + 2.57% | 5.988% | Mar 1, 2029"). Some issuers list '+
+    '20+ series in one big table with numbered footnotes below it for rate-reset history — match footnote '+
+    'numbers carefully to the specific row/series, and don\'t apply a footnote from a different series to this one.\n'+
     (targetHint ? 'The specific security to extract terms for is: '+targetHint+'. The TEXT may describe several '+
       'different series at once — only extract values that are clearly attributed to '+targetHint+' specifically. '+
       'If you cannot find '+targetHint+' described in the TEXT at all, return null for every field.\n' : '')+
     '\nReply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
     '{"ticker":"TSX ticker like ENB.PF.A if stated, else null","issuer":"issuer legal name or null","seriesName":"e.g. Cumulative Redeemable Preference Shares, Series 9, or null","type":"reset|floating|perpetual or null","par":25.00,'+
     '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true or false or null,"convertsTo":"short description or null"}.\n\n'+
-    'TEXT:\n'+text.slice(0, 30000);
+    // Was 30,000 — too tight for issuers with 20+ series in one table (the
+    // specific series a user wants can sit well past that point in the text).
+    'TEXT:\n'+text.slice(0, 150000);
 }
 
 // Fuller prefill (all fields, not just the regex guess subset) for AI-extracted terms.
