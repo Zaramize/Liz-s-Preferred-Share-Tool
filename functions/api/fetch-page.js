@@ -7,6 +7,12 @@ function stripHtml(html) {
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ')
+    // Close table cells with a separator BEFORE the generic tag-strip below —
+    // otherwise adjacent <td>/<th> cells collapse into one run-on line with no
+    // boundary, which is exactly how a specific series' rate/date/type can get
+    // misattributed to the wrong row on a big multi-series table (e.g. an
+    // issuer with 20+ outstanding series in one table, like Enbridge's).
+    .replace(/<\/(td|th)>/gi, ' | ')
     .replace(/<(br|p|div|tr|li|h[1-6])[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
@@ -62,7 +68,11 @@ export async function onRequestGet(context) {
     }
     const html = await upstream.text();
     const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const text = stripHtml(html).slice(0, 50000);
+    // Was 50,000 — too aggressive for issuers with 20+ outstanding series in
+    // one table (e.g. Enbridge), where a specific series' row/footnote can
+    // sit well past that point. Gemini's context window comfortably handles
+    // far more than this, so there's little reason to truncate this tightly.
+    const text = stripHtml(html).slice(0, 180000);
     return new Response(JSON.stringify({ url: targetUrl, title: titleMatch ? titleMatch[1].trim() : null, text }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
