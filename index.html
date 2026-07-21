@@ -251,7 +251,7 @@
     <div id="tab-allseries" style="display:none;">
       <div class="form-row"><label>Issuer name</label><input type="text" id="as_query" placeholder="e.g. RBC, Enbridge, Power Corp, Brookfield"></div>
       <div id="as_status" class="loading-txt"></div>
-      <div class="src-note" style="margin-top:6px;">Searches TSX's public listed-symbol directory for the issuer, then lists every outstanding preferred series found for it (all its .PR. / .PF. tickers) — not just one. Click a series to send its ticker + issuer name into Manual entry; you'll still need to pull its actual dividend terms via the Look-up or PDF tabs before saving.</div>
+      <div class="src-note" style="margin-top:6px;">Searches TSX's public listed-symbol directory for the issuer, then lists every outstanding preferred series found for it (all its .PR. / .PF. tickers) — not just one. Each row shows a live price; click <b>✨ What is this?</b> to have Gemini identify that specific series' rate/type/reset date via live search (free, uses your Gemini key) before you decide which to add. Click <b>Use →</b> to send a series into Manual entry — if you already ran "What is this?" on it, those terms come along too.</div>
       <div id="as_results" style="margin-top:14px; display:flex; flex-direction:column; gap:12px;"></div>
     </div>
   </div>
@@ -581,6 +581,11 @@ let pendingSource = { url:null, name:null };
 document.getElementById('m_save').onclick = async ()=>{
   const ticker = document.getElementById('m_ticker').value.trim();
   if(!ticker) return;
+  const rateStr = document.getElementById('m_rate').value.trim();
+  if(!rateStr){
+    const proceed = confirm('No dividend rate entered for '+ticker+' — it will show 0.00% yield on the watchlist until you fill this in. Save anyway?');
+    if(!proceed) return;
+  }
   const h = {
     ticker,
     issuer: document.getElementById('m_issuer').value.trim(),
@@ -1044,6 +1049,13 @@ function findIssuerPreferredGroups(symbols, query){
   return groups.slice(0, 15); // keep results manageable for a live-typing search
 }
 
+function tickerToElId(ticker){ return ticker.replace(/[^A-Za-z0-9]/g,'_'); }
+
+// Cache Gemini-parsed terms and live prices per ticker for the lifetime of the
+// page — avoids re-fetching if the user re-types the same issuer search.
+let asTermsCache = {};
+let asPriceCache = {};
+
 function renderIssuerSeriesGroups(groups){
   const el = document.getElementById('as_results');
   if(!groups.length){
@@ -1054,9 +1066,17 @@ function renderIssuerSeriesGroups(groups){
     const rows = g.preferreds.map(p=>{
       const already = holdings.some(h => h.ticker === p.ticker);
       const safeIssuer = g.issuerName.replace(/"/g,'&quot;');
-      return '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border);">'+
-        '<div><span class="lres-ticker">'+p.ticker+'</span> <span class="lres-desc">'+p.name+'</span></div>'+
-        '<button class="ghost'+(already?' added':'')+'" data-add-ticker="'+p.ticker+'" data-add-issuer="'+safeIssuer+'" '+(already?'disabled':'')+' style="white-space:nowrap;">'+(already ? '✓ on watchlist' : 'Use →')+'</button>'+
+      const elId = tickerToElId(p.ticker);
+      return '<div style="padding:8px 0; border-bottom:1px solid var(--border);">'+
+        '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">'+
+          '<div><span class="lres-ticker">'+p.ticker+'</span> <span class="lres-desc">'+p.name+'</span></div>'+
+          '<div style="display:flex; gap:6px; align-items:center; white-space:nowrap;">'+
+            '<span id="as-price-'+elId+'" class="src-note">price …</span>'+
+            '<button class="ghost" data-ai-ticker="'+p.ticker+'" id="as-aibtn-'+elId+'">✨ What is this?</button>'+
+            '<button class="ghost'+(already?' added':'')+'" data-add-ticker="'+p.ticker+'" data-add-issuer="'+safeIssuer+'" '+(already?'disabled':'')+'>'+(already ? '✓ on watchlist' : 'Use →')+'</button>'+
+          '</div>'+
+        '</div>'+
+        '<div id="as-terms-'+elId+'" class="src-note" style="margin-top:4px; display:none;"></div>'+
         '</div>';
     }).join('');
     return '<div class="lres-card" style="flex-direction:column; align-items:stretch;">'+
@@ -1064,14 +1084,86 @@ function renderIssuerSeriesGroups(groups){
       '<div style="margin-top:8px;">'+rows+'</div>'+
       '</div>';
   }).join('');
+
   el.querySelectorAll('[data-add-ticker]').forEach(btn=>{
     btn.onclick = ()=>{
       document.querySelector('.tab[data-tab="manual"]').click();
       document.getElementById('m_ticker').value = btn.dataset.addTicker;
       document.getElementById('m_issuer').value = btn.dataset.addIssuer;
-      document.getElementById('m_rate').focus();
+      // If this series was already AI-summarized in the search results, carry
+      // those terms straight into the form instead of making the user retype them.
+      const cached = asTermsCache[btn.dataset.addTicker];
+      if(cached && cached.data){
+        applyFullTermsToManualForm(cached.data, 'issuer search: AI-parsed for '+btn.dataset.addTicker, cached.sources);
+      } else {
+        document.getElementById('m_rate').focus();
+      }
     };
   });
+
+  // Fire off a live price check per row (cheap, existing Yahoo proxy) so the
+  // user has at least one real signal to eyeball before picking a series.
+  const allTickers = groups.flatMap(g => g.preferreds.map(p => p.ticker));
+  allTickers.forEach(async ticker=>{
+    const elId = tickerToElId(ticker);
+    const priceEl = document.getElementById('as-price-'+elId);
+    if(!priceEl) return;
+    if(asPriceCache[ticker] !== undefined){
+      priceEl.textContent = asPriceCache[ticker] != null ? '$'+asPriceCache[ticker].toFixed(2) : 'price n/a';
+      return;
+    }
+    try{
+      const y = await fetchPriceYahoo(ticker);
+      asPriceCache[ticker] = y.price;
+      if(document.getElementById('as-price-'+elId)) priceEl.textContent = '$'+y.price.toFixed(2);
+    }catch(e){
+      asPriceCache[ticker] = null;
+      if(document.getElementById('as-price-'+elId)) priceEl.textContent = 'price n/a';
+    }
+  });
+
+  // On-demand AI summary per series ("What is this?") — calls Gemini with just
+  // the ticker as the target and live search grounding, no IR page scrape needed.
+  el.querySelectorAll('[data-ai-ticker]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const ticker = btn.dataset.aiTicker;
+      const elId = tickerToElId(ticker);
+      const termsEl = document.getElementById('as-terms-'+elId);
+      if(asTermsCache[ticker]){
+        termsEl.style.display = 'block';
+        termsEl.innerHTML = summarizeTermsLine(asTermsCache[ticker].data);
+        return;
+      }
+      btn.disabled = true;
+      termsEl.style.display = 'block';
+      termsEl.textContent = 'Asking Gemini (live search)…';
+      try{
+        const result = await callGeminiExtractFull(buildExtractPrompt(ticker, ''), null, termsEl);
+        asTermsCache[ticker] = result;
+        termsEl.innerHTML = summarizeTermsLine(result.data);
+      }catch(e){
+        termsEl.textContent = describeGeminiError(e);
+      }finally{
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
+// One-line human summary of AI-extracted terms for the issuer-search results
+// (a lighter-weight version of applyFullTermsToManualForm's note, for browsing
+// rather than committing to the form).
+function summarizeTermsLine(full){
+  if(!full || (full.currentRate==null && full.type==null)){
+    return '⚠ Could not confidently identify this series\' terms — verify manually.';
+  }
+  const bits = [];
+  if(full.currentRate!=null) bits.push(full.currentRate+'% ');
+  if(full.type) bits.push(full.type==='reset' ? '5-yr GoC reset' : full.type==='floating' ? '3-mo T-bill float' : 'fixed perpetual');
+  if(full.spreadBps!=null) bits.push('+'+(full.spreadBps/100).toFixed(2)+'% spread');
+  if(full.nextResetDate) bits.push('next reset '+full.nextResetDate);
+  if(full.cumulative!=null) bits.push(full.cumulative ? 'cumulative' : 'non-cumulative');
+  return bits.join(' · ') + ' — verify before saving.';
 }
 
 let asSearchDebounce = null;
