@@ -117,8 +117,8 @@
   }
   .addpanel.open{display:block;}
   .tabs{display:flex; gap:4px; margin-bottom:14px;}
-  .tab{padding:6px 12px; font-size:12.5px; border-radius:6px; cursor:pointer; color:var(--muted); border:1px solid transparent;}
-  .tab.active{background:var(--panel-2); color:var(--text); border-color:var(--border);}
+  .tab,.stab{padding:6px 12px; font-size:12.5px; border-radius:6px; cursor:pointer; color:var(--muted); border:1px solid transparent;}
+  .tab.active,.stab.active{background:var(--panel-2); color:var(--text); border-color:var(--border);}
   .form-row{display:grid; grid-template-columns:140px 1fr; gap:10px; align-items:center; margin-bottom:10px;}
   .form-row label{font-size:12.5px; color:var(--muted);}
   .searchresults{margin-top:12px; display:flex; flex-direction:column; gap:6px;}
@@ -164,6 +164,7 @@
   <div class="toolbar">
     <button class="primary" id="refreshAllBtn">↻ Refresh all</button>
     <button id="addBtn">+ Add holding</button>
+    <button id="scenarioBtn">🧪 Scenarios</button>
     <span class="spacer"></span>
     <label style="color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px;">
       <input type="checkbox" id="autoRefreshToggle" checked style="width:auto;"> Auto-refresh (75s)
@@ -199,6 +200,7 @@
           <option value="yes">Yes</option><option value="no">No</option>
         </select>
       </div>
+      <div class="form-row"><label>Shares held</label><input type="number" id="m_shares" step="1" placeholder="optional — enables portfolio weighting"></div>
       <div id="m_source_note" class="src-note" style="display:none;"></div>
       <div class="form-row"><label></label><button class="primary" id="m_save">Add to watchlist</button></div>
     </div>
@@ -257,14 +259,58 @@
     </div>
   </div>
 
+  <div class="addpanel" id="scenarioPanel">
+    <div class="tabs">
+      <div class="stab active" data-stab="single">Single-holding calculator</div>
+      <div class="stab" data-stab="stress">Portfolio stress test</div>
+      <div class="stab" data-stab="chat">Chat about the ladder</div>
+    </div>
+
+    <div id="stab-single">
+      <div class="form-row"><label>Holding</label>
+        <select id="sc_holding" style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:7px 10px; font-family:var(--mono); font-size:13px;"></select>
+      </div>
+      <div class="form-row"><label>Price ($)</label><input type="number" step="0.01" id="sc_price"></div>
+      <div class="form-row"><label>Current rate (%)</label><input type="number" step="0.001" id="sc_rate"></div>
+      <div class="form-row"><label>Spread (bps)</label><input type="number" step="1" id="sc_spread"></div>
+      <div class="form-row"><label>5-yr GoC assumption (%)</label><input type="number" step="0.001" id="sc_goc"></div>
+      <div class="form-row"><label>3-mo T-bill assumption (%)</label><input type="number" step="0.001" id="sc_tbill"></div>
+      <div class="form-row"><label></label><button class="primary" id="sc_calc">Recalculate</button></div>
+      <div id="sc_result" style="margin-top:10px;"></div>
+      <div class="src-note" style="margin-top:6px;">This only changes numbers in this calculator — it never touches your actual watchlist holding. Pick a holding to prefill its real terms as a starting point, then adjust whatever you want to test.</div>
+    </div>
+
+    <div id="stab-stress" style="display:none;">
+      <div class="form-row"><label>5-yr GoC shift (bps)</label><input type="number" step="5" id="st_goc_shift" value="0"></div>
+      <div class="form-row"><label>3-mo T-bill shift (bps)</label><input type="number" step="5" id="st_tbill_shift" value="0"></div>
+      <div class="form-row"><label></label><button class="primary" id="st_run">Apply to whole ladder</button></div>
+      <div id="st_result" style="margin-top:12px;"></div>
+      <div class="src-note" style="margin-top:6px;">Shifts are applied on top of today's live reference rates to every reset/floating holding on your watchlist at once (perpetuals are unaffected since they don't reset). Shows current yield, yield-at-reset under the shift, and the resulting change in projected annual income across your whole ladder — weighted by shares held where you've entered them.</div>
+    </div>
+
+    <div id="stab-chat" style="display:none;">
+      <div id="chat_log" style="display:flex; flex-direction:column; gap:10px; max-height:420px; overflow-y:auto; padding:4px 2px; margin-bottom:10px;"></div>
+      <div class="override-row">
+        <input type="text" id="chat_input" placeholder="e.g. What happens to my income if the GoC 5-yr falls 100bps? Which of my holdings is most exposed?">
+        <button class="primary" id="chat_send">Send</button>
+      </div>
+      <div class="src-note" style="margin-top:6px;">Uses your Gemini key (free tier) with your current watchlist — tickers, terms, prices, shares, and live/reference rates — sent as context on every message. It has no live web access (see the note elsewhere in this app about why), so treat anything it says about news, redemptions, or events beyond what's in your watchlist as unverified. Good for reasoning through "what if" scenarios on your ladder; not a source of new facts.</div>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto;">
   <table id="watchTable">
     <thead>
       <tr>
         <th>Ticker</th>
         <th>Type</th>
         <th class="num">Price</th>
+        <th class="num">Bid / Ask</th>
+        <th class="num">Volume</th>
+        <th class="num">Weight</th>
         <th class="num">Current yld</th>
         <th class="num">Yld to reset</th>
+        <th class="num">Yld at reset (est.)</th>
         <th class="num">Yld to worst</th>
         <th>Next reset</th>
         <th></th>
@@ -272,6 +318,7 @@
     </thead>
     <tbody id="watchBody"></tbody>
   </table>
+  </div>
   <div class="empty" id="emptyState" style="display:none;">Nothing on the watchlist yet. <b>+ Add holding</b> to get started.</div>
 
   <div class="footer-note">
@@ -326,7 +373,11 @@ function seedDefault(){
     price:null,
     priceSource:null,
     priceTimestamp:null,
-    manualPrice:null
+    manualPrice:null,
+    shares:null,
+    volume:null,
+    bid:null,
+    ask:null
   };
 }
 
@@ -375,7 +426,14 @@ function toYahooSymbol(ticker){
   const result = d.chart && d.chart.result && d.chart.result[0];
   const price = result && result.meta && result.meta.regularMarketPrice;
   if(price == null) throw new Error('no price in yahoo payload');
-  return { price: price, source: 'Yahoo Finance' };
+  const volume = result.meta.regularMarketVolume != null ? result.meta.regularMarketVolume : null;
+  return {
+    price: price,
+    source: 'Yahoo Finance',
+    volume: volume,
+    bid: d.bidAsk ? d.bidAsk.bid : null,
+    ask: d.bidAsk ? d.bidAsk.ask : null
+  };
 }
 async function refreshPrice(h){
   try{
@@ -383,6 +441,9 @@ async function refreshPrice(h){
     h.price = y.price;
     h.priceSource = y.source;
     h.priceTimestamp = new Date().toISOString();
+    h.volume = y.volume;
+    h.bid = y.bid;
+    h.ask = y.ask;
     return;
   }catch(e){
     h.priceSource = 'Yahoo refresh failed — enter manually below';
@@ -429,14 +490,48 @@ function yieldToReset(h, price){
   return annualized;
 }
 
+// Projected running yield AFTER reset, on your CURRENT price — distinct from
+// yieldToReset() above, which blends income with an assumed capital gain/loss
+// as price converges to par. This one assumes NO price convergence: it just
+// projects what the new coupon rate would be (today's reference rate + this
+// series' spread) and expresses it as a % of current price, so it answers
+// "if I buy today and rates stay where they are, what's my running yield
+// after the reset actually happens?" — useful for laddering since it's not
+// contaminated by a redemption-at-par assumption.
+function yieldAtReset(h, price, refOverride){
+  const rr = refOverride || refRates;
+  if(h.spreadBps == null) return null;
+  let refRate = null;
+  if(h.type === 'reset') refRate = rr.goc5yr;
+  else if(h.type === 'floating') refRate = rr.tbill3mo;
+  else return null; // perpetuals don't reset
+  if(refRate == null) return null;
+  const projectedNewRate = refRate + (h.spreadBps/100); // % of par
+  const projectedAnnualDiv = h.par * (projectedNewRate/100);
+  return (projectedAnnualDiv/price)*100;
+}
+// Same as projectedNewRate above but returned directly (% of par) — used by
+// the stress test to show $ income impact, not just a yield-on-price number.
+function projectedNewCouponRate(h, refOverride){
+  const rr = refOverride || refRates;
+  if(h.spreadBps == null) return null;
+  let refRate = null;
+  if(h.type === 'reset') refRate = rr.goc5yr;
+  else if(h.type === 'floating') refRate = rr.tbill3mo;
+  else return h.currentRate; // perpetuals: rate never changes
+  if(refRate == null) return null;
+  return refRate + (h.spreadBps/100);
+}
+
 function computeYields(h){
   const price = h.manualPrice != null ? h.manualPrice : h.price;
-  if(price == null || price <= 0) return { cy:null, ytr:null, ytw:null };
+  if(price == null || price <= 0) return { cy:null, ytr:null, ytw:null, yar:null };
   const cy = currentYield(h, price);
   const ytr = yieldToReset(h, price);
+  const yar = yieldAtReset(h, price);
   let ytw = cy;
   if(ytr != null) ytw = Math.min(cy, ytr);
-  return { cy, ytr, ytw };
+  return { cy, ytr, ytw, yar };
 }
 
 // ---------- rendering ----------
@@ -448,6 +543,33 @@ function daysUntil(dateStr){
   return Math.round(daysBetween(new Date(), d));
 }
 
+// Portfolio weight per holding, by current market value (shares × price).
+// Only holdings with `shares` set participate — if nobody has shares filled
+// in, every weight comes back null and the column just shows dashes.
+function computeWeights(){
+  const values = holdings.map(h=>{
+    if(h.shares == null) return null;
+    const price = h.manualPrice != null ? h.manualPrice : h.price;
+    if(price == null) return null;
+    return h.shares * price;
+  });
+  const total = values.reduce((sum,v)=> v!=null ? sum+v : sum, 0);
+  return values.map(v => (v==null || total<=0) ? null : (v/total)*100);
+}
+
+// Compact one-line term summary shown under the issuer name in the watchlist
+// table, so the structure of a holding is visible without opening the detail
+// card — spread, reference rate type, and cumulative status at a glance.
+function termSummaryLine(h){
+  const bits = [];
+  if(h.type==='reset') bits.push('5-yr GoC'+(h.spreadBps!=null?'+'+(h.spreadBps/100).toFixed(2)+'%':''));
+  else if(h.type==='floating') bits.push('3-mo T-bill'+(h.spreadBps!=null?'+'+(h.spreadBps/100).toFixed(2)+'%':''));
+  else bits.push('Fixed perpetual');
+  bits.push(h.cumulative ? 'cum' : 'non-cum');
+  if(h.par) bits.push('$'+h.par.toFixed(2)+' par');
+  return bits.join(' · ');
+}
+
 function renderTable(){
   const body = document.getElementById('watchBody');
   const empty = document.getElementById('emptyState');
@@ -455,8 +577,9 @@ function renderTable(){
   if(holdings.length===0){ empty.style.display='block'; document.getElementById('watchTable').style.display='none'; return; }
   empty.style.display='none'; document.getElementById('watchTable').style.display='table';
 
+  const weights = computeWeights();
   holdings.forEach((h, idx)=>{
-    const {cy, ytr, ytw} = computeYields(h);
+    const {cy, ytr, yar, ytw} = computeYields(h);
     const price = h.manualPrice != null ? h.manualPrice : h.price;
     const tr = document.createElement('tr');
     tr.onclick = ()=>openDetail(idx);
@@ -464,12 +587,21 @@ function renderTable(){
                   : h.type==='floating' ? '<span class="tag float">FLOAT</span>'
                   : '<span class="tag">PERP</span>';
     const dleft = daysUntil(h.nextResetDate);
+    const bidAskText = (h.bid!=null || h.ask!=null)
+      ? (h.bid!=null?'$'+h.bid.toFixed(2):'—')+' / '+(h.ask!=null?'$'+h.ask.toFixed(2):'—')
+      : 'n/a';
+    const volText = h.volume!=null ? h.volume.toLocaleString() : '—';
+    const weight = weights[idx];
     tr.innerHTML = `
-      <td><div class="ticker">${h.ticker}</div><div class="issuer">${h.issuer||''}</div></td>
+      <td><div class="ticker">${h.ticker}</div><div class="issuer">${h.issuer||''}</div><div class="issuer">${termSummaryLine(h)}</div></td>
       <td>${typeTag}</td>
       <td class="num">${fmtPrice(price)}</td>
+      <td class="num">${bidAskText}</td>
+      <td class="num">${volText}</td>
+      <td class="num">${weight!=null ? weight.toFixed(1)+'%' : '—'}</td>
       <td class="num">${fmtPct(cy)}</td>
       <td class="num">${fmtPct(ytr)}</td>
+      <td class="num">${fmtPct(yar)}</td>
       <td class="num ${ytw!=null && cy!=null && ytw<cy ? 'yield-warn':'yield-good'}">${fmtPct(ytw)}</td>
       <td>${h.nextResetDate||'—'}${dleft!=null?`<div class="issuer">${dleft} days</div>`:''}</td>
       <td style="text-align:right;"><button class="ghost row-remove-btn" title="Remove ${h.ticker} from watchlist" style="padding:4px 9px; color:var(--red); border-color:#4a2020;">✕</button></td>
@@ -487,8 +619,9 @@ function renderTable(){
 
 function openDetail(idx){
   const h = holdings[idx];
-  const {cy, ytr, ytw} = computeYields(h);
+  const {cy, ytr, yar, ytw} = computeYields(h);
   const price = h.manualPrice != null ? h.manualPrice : h.price;
+  const weight = computeWeights()[idx];
   const card = document.getElementById('detailCard');
   card.innerHTML = `
     <div class="card-head">
@@ -503,8 +636,22 @@ function openDetail(idx){
         <div class="sfield"><div class="lbl">Price</div><div class="val">${fmtPrice(price)}</div></div>
         <div class="sfield"><div class="lbl">Current yield</div><div class="val">${fmtPct(cy)}</div></div>
         <div class="sfield"><div class="lbl">Yield to reset</div><div class="val">${fmtPct(ytr)}</div></div>
+        <div class="sfield"><div class="lbl">Yield at reset (est.)</div><div class="val">${fmtPct(yar)}</div></div>
         <div class="sfield"><div class="lbl">Yield to worst</div><div class="val">${fmtPct(ytw)}</div></div>
+        <div class="sfield"><div class="lbl">Portfolio weight</div><div class="val">${weight!=null?weight.toFixed(1)+'%':'—'}</div></div>
       </div>
+
+      <div class="section-label">Market</div>
+      <div class="grid2" style="margin-bottom:14px;">
+        <div>
+          <div class="kv"><span class="k">Bid</span><span class="v">${h.bid!=null?'$'+h.bid.toFixed(2):'n/a'}</span></div>
+          <div class="kv"><span class="k">Ask</span><span class="v">${h.ask!=null?'$'+h.ask.toFixed(2):'n/a'}</span></div>
+        </div>
+        <div>
+          <div class="kv"><span class="k">Volume</span><span class="v">${h.volume!=null?h.volume.toLocaleString():'—'}</span></div>
+        </div>
+      </div>
+      <div class="src-note" style="margin-bottom:18px;">Bid/ask come from Yahoo's quote endpoint on a best-effort basis — it can silently be unavailable (shows "n/a") since Yahoo has periodically required auth on that specific endpoint. Volume comes from the same source you already use for price, so it's reliable whenever price refresh works. Many thinly-traded preferreds will show low/zero volume on any free delayed feed.</div>
 
       <div class="src-note" style="margin-bottom:18px;">
         <button id="searchNewsBtn" class="ghost">🔎 Search the web for rate/reset news on ${h.ticker}</button>
@@ -528,8 +675,12 @@ function openDetail(idx){
         </div>
       </div>
 
-      <div class="section-label">Price override</div>
+      <div class="section-label">Position &amp; price override</div>
       <div class="override-row">
+        <input type="number" step="1" id="sharesInput" placeholder="shares held (for weighting)" value="${h.shares!=null?h.shares:''}">
+        <button id="saveShares">Save</button>
+      </div>
+      <div class="override-row" style="margin-top:8px;">
         <input type="number" step="0.01" id="manualPriceInput" placeholder="manual price if refresh is off" value="${h.manualPrice!=null?h.manualPrice:''}">
         <button id="saveManualPrice">Save</button>
         <button id="clearManualPrice" class="ghost">Use live</button>
@@ -540,7 +691,12 @@ function openDetail(idx){
 
       <div class="section-label">Yield-to-reset assumption</div>
       <div class="src-note">
-        Calculated as the IRR of buying at the current price, collecting quarterly dividends at the current fixed rate through ${h.nextResetDate||'the next reset date'}, then assuming redemption at par ($${h.par.toFixed(2)}) on that date. This is the standard convention for Canadian rate-reset preferreds — it is not a guarantee Enbridge (or any issuer) will actually call the shares.
+        Calculated as the IRR of buying at the current price, collecting quarterly dividends at the current fixed rate through ${h.nextResetDate||'the next reset date'}, then assuming redemption at par ($${h.par.toFixed(2)}) on that date. This is the standard convention for Canadian rate-reset preferreds — it is not a guarantee the issuer will actually call the shares, and it blends your income with an assumed capital gain/loss as price converges to par.
+      </div>
+
+      <div class="section-label">Yield-at-reset (est.) assumption</div>
+      <div class="src-note">
+        A different question: assuming today's ${h.type==='floating'?'3-mo T-bill':'5-yr GoC'} yield (${h.type==='floating'? (refRates.tbill3mo!=null?refRates.tbill3mo.toFixed(3)+'%':'unavailable') : (refRates.goc5yr!=null?refRates.goc5yr.toFixed(3)+'%':'unavailable')}) holds steady until the reset date, the new coupon would be roughly ${h.spreadBps!=null && (h.type==='reset'?refRates.goc5yr:h.type==='floating'?refRates.tbill3mo:null)!=null ? ((h.type==='reset'?refRates.goc5yr:refRates.tbill3mo)+(h.spreadBps/100)).toFixed(3)+'%' : 'not calculable (need spread + reference rate)'} of par. This metric shows that projected coupon as a yield on your CURRENT price — no assumption about price converging to par, since a reset isn't a redemption. Real rates between now and reset will differ from today's, so treat this as a snapshot, not a forecast.
       </div>
 
       <div style="margin-top:20px; display:flex; gap:8px;">
@@ -550,6 +706,11 @@ function openDetail(idx){
   `;
   document.getElementById('overlay').classList.add('open');
   document.getElementById('closeDetail').onclick = closeDetail;
+  document.getElementById('saveShares').onclick = async ()=>{
+    const v = parseFloat(document.getElementById('sharesInput').value);
+    h.shares = isNaN(v) ? null : v;
+    await saveHoldings(); renderTable(); openDetail(idx);
+  };
   document.getElementById('saveManualPrice').onclick = async ()=>{
     const v = parseFloat(document.getElementById('manualPriceInput').value);
     h.manualPrice = isNaN(v) ? null : v;
@@ -575,6 +736,19 @@ document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.
 document.getElementById('addBtn').onclick = ()=>{
   document.getElementById('addPanel').classList.toggle('open');
 };
+document.getElementById('scenarioBtn').onclick = ()=>{
+  document.getElementById('scenarioPanel').classList.toggle('open');
+  if(document.getElementById('scenarioPanel').classList.contains('open')) initScenarioPanel();
+};
+document.querySelectorAll('.stab').forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll('.stab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('stab-single').style.display = t.dataset.stab==='single' ? 'block':'none';
+    document.getElementById('stab-stress').style.display = t.dataset.stab==='stress' ? 'block':'none';
+    document.getElementById('stab-chat').style.display = t.dataset.stab==='chat' ? 'block':'none';
+  };
+});
 document.querySelectorAll('.tab').forEach(t=>{
   t.onclick = ()=>{
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
@@ -612,6 +786,7 @@ document.getElementById('m_save').onclick = async ()=>{
     convertsTo: null,
     termsSourceUrl: pendingSource.url,
     termsSourceName: pendingSource.name || 'manual entry',
+    shares: parseFloat(document.getElementById('m_shares').value) || null,
     price:null, priceSource:null, priceTimestamp:null, manualPrice:null
   };
   holdings.push(h);
@@ -620,6 +795,7 @@ document.getElementById('m_save').onclick = async ()=>{
   document.getElementById('addPanel').classList.remove('open');
   document.getElementById('m_source_note').style.display = 'none';
   pendingSource = { url:null, name:null };
+  document.getElementById('m_shares').value = '';
   refreshPrice(h).then(async ()=>{ await saveHoldings(); renderTable(); });
 };
 
@@ -703,11 +879,15 @@ function applyGuessesToManualForm(guesses, sourceName){
 // Not used anywhere automatically — only fires when the "Parse with AI" button is clicked.
 function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
-async function callGeminiExtractOnce(prompt, inlineData){
+// Shared low-level call to /api/gemini-proxy — handles the fetch, error
+// classification (quota/transient), and returns the raw {text, modelUsed}.
+// Both the JSON-extraction path and the freeform chat path build on this
+// instead of duplicating error handling with two different quality levels.
+async function callGeminiProxyRaw(bodyPayload){
   const resp = await fetch('/api/gemini-proxy', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ prompt, inlineData: inlineData || null })
+    body: JSON.stringify(bodyPayload)
   });
   let data;
   try{ data = await resp.json(); }catch(e){ throw new Error('gemini proxy returned non-JSON (http '+resp.status+')'); }
@@ -721,6 +901,10 @@ async function callGeminiExtractOnce(prompt, inlineData){
     err.quotaExceeded = /exceeded your current quota|quota exceeded/i.test(msg);
     throw err;
   }
+  return data; // { text, modelUsed, sources }
+}
+async function callGeminiExtractOnce(prompt, inlineData){
+  const data = await callGeminiProxyRaw({ prompt, inlineData: inlineData || null });
   const clean = (data.text||'').replace(/```json|```/g,'').trim();
   let parsed;
   try{ parsed = JSON.parse(clean); }
@@ -1427,6 +1611,169 @@ function startAuto(){
   autoTimer = setInterval(refreshAll, 75000);
 }
 function stopAuto(){ if(autoTimer) clearInterval(autoTimer); autoTimer=null; }
+
+// ==================== Scenarios: single-holding calculator ====================
+function initScenarioPanel(){
+  const sel = document.getElementById('sc_holding');
+  const prevValue = sel.value;
+  sel.innerHTML = holdings.map((h,i)=>`<option value="${i}">${h.ticker} — ${h.issuer||''}</option>`).join('');
+  if(holdings.length){
+    sel.value = (prevValue && holdings[prevValue]) ? prevValue : '0';
+    prefillScenarioFromHolding();
+  }
+}
+function prefillScenarioFromHolding(){
+  const idx = parseInt(document.getElementById('sc_holding').value, 10);
+  const h = holdings[idx];
+  if(!h) return;
+  const price = h.manualPrice != null ? h.manualPrice : h.price;
+  document.getElementById('sc_price').value = price != null ? price : '';
+  document.getElementById('sc_rate').value = h.currentRate != null ? h.currentRate : '';
+  document.getElementById('sc_spread').value = h.spreadBps != null ? h.spreadBps : '';
+  document.getElementById('sc_goc').value = refRates.goc5yr != null ? refRates.goc5yr : '';
+  document.getElementById('sc_tbill').value = refRates.tbill3mo != null ? refRates.tbill3mo : '';
+  document.getElementById('sc_result').innerHTML = '';
+}
+document.getElementById('sc_holding').addEventListener('change', prefillScenarioFromHolding);
+document.getElementById('sc_calc').onclick = ()=>{
+  const idx = parseInt(document.getElementById('sc_holding').value, 10);
+  const real = holdings[idx];
+  if(!real) return;
+  const price = parseFloat(document.getElementById('sc_price').value);
+  const rate = parseFloat(document.getElementById('sc_rate').value);
+  const spread = parseFloat(document.getElementById('sc_spread').value);
+  const gocInput = parseFloat(document.getElementById('sc_goc').value);
+  const tbillInput = parseFloat(document.getElementById('sc_tbill').value);
+  if(isNaN(price) || price<=0){ document.getElementById('sc_result').innerHTML = '<span style="color:var(--amber);">Enter a valid price.</span>'; return; }
+  // Build a hypothetical holding using real.type/par/nextResetDate/cumulative
+  // (structural terms) but whatever rate/spread the user typed in.
+  const hypo = Object.assign({}, real, {
+    currentRate: isNaN(rate) ? real.currentRate : rate,
+    spreadBps: isNaN(spread) ? real.spreadBps : spread
+  });
+  const hypoRefRates = {
+    goc5yr: isNaN(gocInput) ? refRates.goc5yr : gocInput,
+    tbill3mo: isNaN(tbillInput) ? refRates.tbill3mo : tbillInput
+  };
+  const cy = currentYield(hypo, price);
+  const ytr = yieldToReset(hypo, price);
+  const yar = yieldAtReset(hypo, price, hypoRefRates);
+  const realYields = computeYields(real);
+  const rows = [
+    ['Current yield', fmtPct(realYields.cy), fmtPct(cy)],
+    ['Yield to reset (par-convergence)', fmtPct(realYields.ytr), fmtPct(ytr)],
+    ['Yield at reset (est., no convergence)', fmtPct(realYields.yar), fmtPct(yar)]
+  ];
+  document.getElementById('sc_result').innerHTML =
+    '<table style="width:100%; font-family:var(--mono); font-size:13px;"><thead><tr><th style="text-align:left; padding:4px 0;">Metric</th><th style="text-align:right;">Actual now</th><th style="text-align:right;">Hypothetical</th></tr></thead><tbody>'+
+    rows.map(r=>`<tr><td style="padding:4px 0;">${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td></tr>`).join('')+
+    '</tbody></table>';
+};
+
+// ==================== Scenarios: portfolio stress test ====================
+document.getElementById('st_run').onclick = ()=>{
+  const gocShiftBps = parseFloat(document.getElementById('st_goc_shift').value) || 0;
+  const tbillShiftBps = parseFloat(document.getElementById('st_tbill_shift').value) || 0;
+  const shifted = {
+    goc5yr: refRates.goc5yr != null ? refRates.goc5yr + gocShiftBps/100 : null,
+    tbill3mo: refRates.tbill3mo != null ? refRates.tbill3mo + tbillShiftBps/100 : null
+  };
+  if(shifted.goc5yr == null && shifted.tbill3mo == null){
+    document.getElementById('st_result').innerHTML = '<span style="color:var(--amber);">Reference rates haven\'t loaded yet — try again in a moment.</span>';
+    return;
+  }
+  let totalCurrentIncome = 0, totalProjectedIncome = 0, anyShares = false;
+  const rowsHtml = holdings.map(h=>{
+    const price = h.manualPrice != null ? h.manualPrice : h.price;
+    const currentIncomePerShare = h.par * (h.currentRate/100);
+    const projRate = projectedNewCouponRate(h, shifted); // % of par, null if not applicable
+    const projIncomePerShare = projRate != null ? h.par * (projRate/100) : null;
+    const yarShifted = price != null ? yieldAtReset(h, price, shifted) : null;
+    if(h.shares != null){
+      anyShares = true;
+      totalCurrentIncome += currentIncomePerShare * h.shares;
+      totalProjectedIncome += (projIncomePerShare != null ? projIncomePerShare : currentIncomePerShare) * h.shares;
+    }
+    return `<tr>
+      <td>${h.ticker}</td>
+      <td>${h.type}</td>
+      <td class="num">${projRate!=null ? projRate.toFixed(3)+'%' : (h.type==='perpetual'?'n/a (perp)':'—')}</td>
+      <td class="num">${fmtPct(yarShifted)}</td>
+      <td class="num">${h.shares!=null ? '$'+(projIncomePerShare!=null?(projIncomePerShare*h.shares).toFixed(2):(currentIncomePerShare*h.shares).toFixed(2)) : '—'}</td>
+    </tr>`;
+  }).join('');
+  const incomeDeltaHtml = anyShares
+    ? `<div class="summary-strip" style="margin-bottom:14px;">
+         <div class="sfield"><div class="lbl">Current annual income</div><div class="val">$${totalCurrentIncome.toFixed(2)}</div></div>
+         <div class="sfield"><div class="lbl">Projected after all resets</div><div class="val">$${totalProjectedIncome.toFixed(2)}</div></div>
+         <div class="sfield"><div class="lbl">Change</div><div class="val" style="color:${totalProjectedIncome>=totalCurrentIncome?'var(--teal)':'var(--red)'};">${totalProjectedIncome>=totalCurrentIncome?'+':''}$${(totalProjectedIncome-totalCurrentIncome).toFixed(2)}</div></div>
+       </div>`
+    : `<div class="src-note" style="margin-bottom:14px;">No holdings have "Shares held" filled in, so this can only show projected rates/yields, not dollar income impact — add shares in each holding's detail view to see that.</div>`;
+  document.getElementById('st_result').innerHTML = incomeDeltaHtml +
+    `<table style="width:100%; font-family:var(--mono); font-size:12.5px;"><thead><tr>
+      <th style="text-align:left;">Ticker</th><th style="text-align:left;">Type</th>
+      <th class="num">Projected new coupon</th><th class="num">Yld at reset (shifted)</th><th class="num">Income after reset</th>
+    </tr></thead><tbody>${rowsHtml}</tbody></table>
+    <div class="src-note" style="margin-top:8px;">"Income after reset" assumes ALL resettable holdings have already reset to the shifted rate — it's not date-aware (doesn't stagger by each holding's actual next-reset date). Treat it as "steady-state income if this rate environment persists," not a month-by-month projection.</div>`;
+};
+
+// ==================== Scenarios: chat about the ladder ====================
+let chatHistory = []; // [{role:'user'|'assistant', text}]
+function buildPortfolioContextForChat(){
+  const lines = holdings.map(h=>{
+    const price = h.manualPrice != null ? h.manualPrice : h.price;
+    const {cy, ytr, yar, ytw} = computeYields(h);
+    return `- ${h.ticker} (${h.issuer||'unknown issuer'}): ${h.type}, par $${h.par}, current rate ${h.currentRate}%, spread ${h.spreadBps!=null?(h.spreadBps/100).toFixed(2)+'%':'n/a'}, `+
+      `next reset ${h.nextResetDate||'n/a'}, cumulative ${h.cumulative?'yes':'no'}, price ${price!=null?'$'+price.toFixed(2):'n/a'}, shares ${h.shares!=null?h.shares:'not entered'}, `+
+      `current yield ${fmtPct(cy)}, yield to reset ${fmtPct(ytr)}, yield at reset (est.) ${fmtPct(yar)}, yield to worst ${fmtPct(ytw)}`;
+  }).join('\n');
+  return `The user's Canadian preferred-share watchlist (a dividend ladder they're building):\n${lines || '(no holdings yet)'}\n\n`+
+    `Current reference rates: 5-yr GoC bond yield ${refRates.goc5yr!=null?refRates.goc5yr.toFixed(3)+'%':'unavailable'}, 3-mo T-bill ${refRates.tbill3mo!=null?refRates.tbill3mo.toFixed(3)+'%':'unavailable'} (Bank of Canada Valet API).`;
+}
+function renderChatLog(){
+  const log = document.getElementById('chat_log');
+  log.innerHTML = chatHistory.map(m=>{
+    const isUser = m.role==='user';
+    return `<div style="align-self:${isUser?'flex-end':'flex-start'}; max-width:85%; background:${isUser?'var(--panel-2)':'var(--panel)'}; border:1px solid var(--border); border-radius:8px; padding:8px 12px; white-space:pre-wrap;">${m.text.replace(/</g,'&lt;')}</div>`;
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+async function sendChatMessage(){
+  const input = document.getElementById('chat_input');
+  const text = input.value.trim();
+  if(!text) return;
+  chatHistory.push({role:'user', text});
+  renderChatLog();
+  input.value = '';
+  const sendBtn = document.getElementById('chat_send');
+  sendBtn.disabled = true; sendBtn.textContent = 'Thinking…';
+  chatHistory.push({role:'assistant', text:'…'});
+  renderChatLog();
+  try{
+    const systemInstruction = 'You are a financial-data assistant helping a retail investor reason about a Canadian preferred-share dividend ladder they are building. '+
+      'You have NO live internet access — you can only reason about the portfolio data given to you in context below plus general, timeless knowledge of how '+
+      'Canadian rate-reset/floating preferred shares work (structure, terminology, general math). Do NOT claim specific current rates, redemption announcements, '+
+      'or news beyond what is given in context — if asked about something you cannot know without live data, say so plainly instead of guessing. You are not a '+
+      'licensed financial advisor; give factual analysis and help the user think through scenarios, not personalized recommendations to buy/sell/hold.\n\n'+
+      buildPortfolioContextForChat();
+    const data = await callGeminiProxyRaw({
+      prompt: text,
+      systemInstruction: systemInstruction,
+      history: chatHistory.slice(0,-2).map(m=>({role:m.role, text:m.text})), // exclude the placeholder + this new user turn (sent separately as prompt)
+      jsonMode: false
+    });
+    chatHistory[chatHistory.length-1] = { role:'assistant', text: data.text || '(empty response)' };
+  }catch(e){
+    chatHistory[chatHistory.length-1] = { role:'assistant', text: '⚠ '+describeGeminiError(e) };
+  }finally{
+    sendBtn.disabled = false; sendBtn.textContent = 'Send';
+    renderChatLog();
+  }
+}
+document.getElementById('chat_send').onclick = sendChatMessage;
+document.getElementById('chat_input').addEventListener('keydown', (e)=>{
+  if(e.key==='Enter'){ e.preventDefault(); sendChatMessage(); }
+});
 
 // ---------- init ----------
 (async function init(){
