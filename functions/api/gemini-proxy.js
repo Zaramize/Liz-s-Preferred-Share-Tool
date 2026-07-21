@@ -50,10 +50,26 @@ export async function onRequestPost(context) {
     parts.push({ inlineData: { mimeType: payload.inlineData.mimeType, data: payload.inlineData.data } });
   }
 
-  const body = {
-    contents: [{ role: 'user', parts }],
-    generationConfig: { responseMimeType: 'application/json' }
-  };
+  const contents = [];
+  if (Array.isArray(payload.history)) {
+    for (const turn of payload.history) {
+      if (turn && turn.text && (turn.role === 'user' || turn.role === 'assistant')) {
+        contents.push({ role: turn.role === 'assistant' ? 'model' : 'user', parts: [{ text: turn.text }] });
+      }
+    }
+  }
+  contents.push({ role: 'user', parts });
+
+  const body = { contents };
+  // Existing callers (term extraction) never set jsonMode, so this defaults
+  // to true and behaves exactly as before. The new chat feature passes
+  // jsonMode:false to get a plain conversational reply instead of forced JSON.
+  if (payload.jsonMode !== false) {
+    body.generationConfig = { responseMimeType: 'application/json' };
+  }
+  if (payload.systemInstruction) {
+    body.systemInstruction = { parts: [{ text: payload.systemInstruction }] };
+  }
 
   let lastText = '', lastStatus = 502;
   for (const model of MODEL_CHAIN) {
