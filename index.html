@@ -252,7 +252,7 @@
     <div id="tab-allseries" style="display:none;">
       <div class="form-row"><label>Issuer name</label><input type="text" id="as_query" placeholder="e.g. RBC, Enbridge, Power Corp, Brookfield"></div>
       <div id="as_status" class="loading-txt"></div>
-      <div class="src-note" style="margin-top:6px;">Searches TSX's public listed-symbol directory for the issuer, then lists every outstanding preferred series found for it (all its .PR. / .PF. tickers) — not just one. Each row shows a live price. Click <b>✨ What is this?</b> or <b>Use →</b> to fetch the issuer's actual investor-relations page and have Gemini extract that specific series' rate/type/reset date from it (free, uses your Gemini key) — currently only works for issuers seeded in <code>KNOWN_ISSUERS</code> (Enbridge, RBC, CIBC, TD, BMO so far); for others it'll tell you to add a URL via the "Look up issuer" tab instead. Gemini has no live web search here, so it only ever reads the actual page fetched — never guesses from memory.</div>
+      <div class="src-note" style="margin-top:6px;">Searches TSX's public listed-symbol directory for the issuer, then lists every outstanding preferred series found for it (all its .PR. / .PF. tickers) — not just one. Each row shows a live price. Click <b>✨ What is this?</b> or <b>Use →</b> to fetch the issuer's actual investor-relations page and have Gemini extract that specific series' rate/type/reset date from it (free, uses your Gemini key) — works for issuers seeded in <code>KNOWN_ISSUERS</code> (33 major TSX preferred issuers as of this build); for others it'll tell you to add a URL via the "Look up issuer" tab instead. Gemini has no live web search here, so it only ever reads the actual page fetched — never guesses from memory.</div>
       <div id="as_results" style="margin-top:14px; display:flex; flex-direction:column; gap:12px;"></div>
     </div>
   </div>
@@ -267,6 +267,7 @@
         <th class="num">Yld to reset</th>
         <th class="num">Yld to worst</th>
         <th>Next reset</th>
+        <th></th>
       </tr>
     </thead>
     <tbody id="watchBody"></tbody>
@@ -471,7 +472,15 @@ function renderTable(){
       <td class="num">${fmtPct(ytr)}</td>
       <td class="num ${ytw!=null && cy!=null && ytw<cy ? 'yield-warn':'yield-good'}">${fmtPct(ytw)}</td>
       <td>${h.nextResetDate||'—'}${dleft!=null?`<div class="issuer">${dleft} days</div>`:''}</td>
+      <td style="text-align:right;"><button class="ghost row-remove-btn" title="Remove ${h.ticker} from watchlist" style="padding:4px 9px; color:var(--red); border-color:#4a2020;">✕</button></td>
     `;
+    tr.querySelector('.row-remove-btn').onclick = async (e)=>{
+      e.stopPropagation(); // don't also open the detail overlay
+      if(!confirm('Remove '+h.ticker+' from your watchlist?')) return;
+      holdings.splice(idx,1);
+      await saveHoldings();
+      renderTable();
+    };
     body.appendChild(tr);
   });
 }
