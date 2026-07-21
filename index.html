@@ -221,6 +221,7 @@
         <button class="primary" id="l_prefill">Use pattern guesses in Manual entry →</button>
         <button id="l_ai_parse" class="ghost">✨ Parse with AI (free, needs Gemini key)</button>
       </div>
+      <div id="l_series_list" style="display:none; margin-top:10px;"></div>
       <div id="l_ai_status" class="loading-txt" style="display:none;"></div>
       <textarea id="l_text" readonly style="display:none; width:100%; height:260px; margin-top:12px; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:var(--mono); font-size:12px; padding:10px;"></textarea>
     </div>
@@ -644,7 +645,14 @@ function guessTermsFromText(text){
 
   return guesses;
 }
-function renderGuessHtml(guesses){
+function findAllTickersInText(text, prefixes){
+    const re = /\b([A-Z]{1,5})\.(?:PR|PF)\.[A-Z0-9]{1,3}\b/g;
+    const found = [...text.matchAll(re)].map(m=>m[0]);
+    const unique = [...new Set(found)];
+    if(!prefixes || !prefixes.length) return unique;
+    return unique.filter(t => prefixes.some(p => t.toUpperCase().startsWith(p.toUpperCase()+'.')));
+}
+  function renderGuessHtml(guesses){
   return '⚠ Pattern guesses (verify against the text, these are NOT reliable):'+
     (guesses.ticker ? '<br>Ticker-like text found: <b>'+guesses.ticker+'</b>' : '')+
     (guesses.rate ? '<br>First % found: <b>'+guesses.rate+'%</b>' : '')+
@@ -871,9 +879,12 @@ document.getElementById('p_go').onclick = async ()=>{
 // Add more by appending { name, url } — the array only stores what you tell it to.
 const KNOWN_ISSUERS = [
   { name: 'Enbridge Inc.', aliases: ['enbridge', 'enb'], tickerPrefixes: ['ENB'], url: 'https://www.enbridge.com/investment-center/stock-and-dividend-information/preferred-hybrid-shares' },
-  { name: 'Royal Bank of Canada', aliases: ['rbc', 'royal bank', 'ry'], tickerPrefixes: ['RY'], url: 'https://www.rbc.com/investor-relations/share-information.html' }
-];
-(function populateIssuerList(){
+  { name: 'Royal Bank of Canada', aliases: ['rbc', 'royal bank', 'ry'], tickerPrefixes: ['RY'], url: 'https://www.rbc.com/investor-relations/share-information.html' },
+  { name: 'Canadian Imperial Bank of Commerce', aliases: ['cibc', 'canadian imperial bank of commerce', 'cm'], tickerPrefixes: ['CM'], url: 'https://www.cibc.com/en/about-cibc/investor-relations/share-information/preferred-shares.html' },
+  { name: 'Toronto-Dominion Bank', aliases: ['td', 'td bank', 'toronto-dominion'], tickerPrefixes: ['TD'], url: 'https://www.td.com/ca/en/about-td/for-investors/investor-relations/share-information/preferred-shares' },
+  { name: 'Bank of Montreal', aliases: ['bmo', 'bank of montreal'], tickerPrefixes: ['BMO'], url: 'https://www.bmo.com/main/about-bmo/investor-relations/shareholder-information/preferred-shares' }
+  ];
+  (function populateIssuerList(){
   const dl = document.getElementById('l_issuer_list');
   KNOWN_ISSUERS.forEach(i=>{
     const opt = document.createElement('option');
@@ -911,6 +922,7 @@ document.getElementById('l_go').onclick = async ()=>{
   guessEl.style.display = 'none';
   prefillRow.style.display = 'none';
   aiStatus.style.display = 'none';
+  document.getElementById('l_series_list').style.display = 'none';
   try{
     const resp = await fetch('/api/fetch-page?url='+encodeURIComponent(url));
     const data = await resp.json();
@@ -928,6 +940,27 @@ document.getElementById('l_go').onclick = async ()=>{
       prefillBtn.onclick = ()=> applyGuessesToManualForm(guesses, (issuer||'IR page')+' ('+url+')');
     } else {
       prefillBtn.style.display = 'none';
+    }
+    const issuerMatch = KNOWN_ISSUERS.find(i => i.name === issuer || (i.aliases||[]).includes(issuer.toLowerCase()));
+    const seriesTickers = findAllTickersInText(data.text, issuerMatch ? issuerMatch.tickerPrefixes : null);
+    const seriesListEl = document.getElementById('l_series_list');
+    if(seriesTickers.length){
+        seriesListEl.style.display = 'block';
+    let sHtml = '<div class="src-note" style="margin-bottom:6px;">Series found on this page (' + seriesTickers.length + '):</div>';
+        seriesTickers.forEach(t=>{
+              sHtml += '<button class="ghost" style="margin:3px 6px 3px 0;" data-series-ticker="'+t+'">'+t+' →</button>';
+        });
+        seriesListEl.innerHTML = sHtml;
+        seriesListEl.querySelectorAll('[data-series-ticker]').forEach(btn=>{
+              btn.onclick = ()=>{
+        document.querySelector('.tab[data-tab="manual"]').click();
+                      document.getElementById('m_ticker').value = btn.dataset.seriesTicker;
+                      if(issuer) document.getElementById('m_issuer').value = issuer;
+              };
+        });
+    } else {
+        seriesListEl.style.display = 'none';
+        seriesListEl.innerHTML = '';
     }
     document.getElementById('l_ai_parse').onclick = async ()=>{
       aiStatus.style.display = 'block';
