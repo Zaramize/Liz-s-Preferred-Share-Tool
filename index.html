@@ -771,17 +771,21 @@ async function callGeminiExtractFull(prompt, inlineData, statusEl){
 function buildExtractPrompt(targetHint, text){
   return 'You are extracting the CURRENT contractual dividend terms of a specific Canadian preferred share.\n'+
     (targetHint
-      ? 'The specific security to extract terms for is: '+targetHint+'. Use Google Search to find its terms directly — '+
-        'search things like "'+targetHint+' dividend rate reset" or "'+targetHint+' prospectus terms" — and prefer the '+
-        'issuer\'s own press release (CNW/Business Wire/newswire) or prospectus over the pasted TEXT below if they disagree, '+
-        'since the TEXT may be a page listing many different series and the wrong one could easily get picked.'
-      : 'Identify the specific series from the TEXT below, then use Google Search to verify its terms against the '+
-        'issuer\'s own press release or prospectus rather than relying on the TEXT alone.'
+      ? 'The specific security to extract terms for is: '+targetHint+'. Use Google Search to find its terms directly. '+
+        'Search in this priority order and stop as soon as you find a source in a higher tier: '+
+        '(1) the issuer\'s own investor-relations website (its official domain, e.g. a "preferred shares" or "capital securities" page under investor relations), '+
+        '(2) the issuer\'s own press release announcing the rate/reset (distributed via CNW, Business Wire, or GlobeNewswire, but authored by the issuer), '+
+        '(3) the original prospectus or prospectus supplement (SEDAR+ or the issuer\'s site). '+
+        'Only fall back to third-party aggregators, data providers, or forums (e.g. preferred-share tracking sites, brokerage pages) if none of tiers 1-3 turn up anything, and if you do, treat that result as lower-confidence. '+
+        'Prefer tier 1-3 sources over the pasted TEXT below if they disagree, since the TEXT may be a page listing many different series and the wrong one could easily get picked.'
+      : 'Identify the specific series from the TEXT below, then use Google Search to verify its terms — prioritize the '+
+        'issuer\'s own investor-relations page, then its own press release, then the prospectus, before trusting the TEXT alone or any third-party aggregator.'
     )+'\n\n'+
     'Reply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
     '{"ticker":"TSX ticker like ENB.PF.A if stated, else null","issuer":"issuer legal name or null","seriesName":"e.g. Cumulative Redeemable Preference Shares, Series 9, or null","type":"reset|floating|perpetual or null","par":25.00,'+
-    '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true or false or null,"convertsTo":"short description or null"}. '+
-    (targetHint ? 'If you cannot confidently verify terms specifically for '+targetHint+', return null for every field rather than guessing from an unrelated series. ' : '')+
+    '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true or false or null,"convertsTo":"short description or null",'+
+    '"sourceType":"issuer_ir|press_release|prospectus|third_party|null — which tier the winning source fell into"}. '+
+    (targetHint ? 'If you cannot confidently verify terms specifically for '+targetHint+' from ANY tier, return null for every field rather than guessing from an unrelated series. ' : '')+
     'Use null for anything not clearly stated rather than guessing.\n\nTEXT (context only — verify against live search before trusting this):\n'+
     text.slice(0, 30000);
 }
@@ -802,7 +806,13 @@ function sanityCheckTerms(full){
     const d = new Date(full.nextResetDate+'T00:00:00');
     if(isNaN(d.getTime())) warnings.push('Next reset date "'+full.nextResetDate+'" doesn\'t look like a valid date.');
   }
+  if(full.sourceType === 'third_party'){
+    warnings.push('Could not confirm this against the issuer\'s own IR page, press release, or prospectus — the best source found was a third-party site. Verify directly with the issuer before trusting these numbers.');
+  }
   return warnings;
+}
+function sourceTypeLabel(t){
+  return { issuer_ir:'issuer IR page', press_release:'issuer press release', prospectus:'prospectus', third_party:'third-party source (unconfirmed)' }[t] || null;
 }
 function applyFullTermsToManualForm(full, sourceName, sources){
   if(full.ticker) document.getElementById('m_ticker').value = full.ticker;
@@ -818,8 +828,9 @@ function applyFullTermsToManualForm(full, sourceName, sources){
   const noteEl = document.getElementById('m_source_note');
   noteEl.style.display = 'block';
   const warnings = sanityCheckTerms(full);
+  const typeLabel = sourceTypeLabel(full.sourceType);
   const sourceLinks = (sources||[]).length
-    ? '<br>Verified against: '+sources.map(s=>'<a href="'+s.uri+'" target="_blank" rel="noopener" style="color:var(--teal);">'+ (s.title||s.uri) +'</a>').join(', ')
+    ? '<br>Verified against'+(typeLabel ? ' ('+typeLabel+')' : '')+': '+sources.map(s=>'<a href="'+s.uri+'" target="_blank" rel="noopener" style="color:var(--teal);">'+ (s.title||s.uri) +'</a>').join(', ')
     : '<br><span style="color:var(--amber);">No live search sources came back — this may be based on the pasted text alone. Verify carefully.</span>';
   const warningHtml = warnings.length
     ? '<br><span style="color:var(--red);">⚠ '+warnings.join(' ')+'</span>'
@@ -1131,7 +1142,7 @@ function renderIssuerSeriesGroups(groups){
       const termsEl = document.getElementById('as-terms-'+elId);
       if(asTermsCache[ticker]){
         termsEl.style.display = 'block';
-        termsEl.innerHTML = summarizeTermsLine(asTermsCache[ticker].data);
+        termsEl.innerHTML = summarizeTermsLine(asTermsCache[ticker].data, asTermsCache[ticker].sources);
         return;
       }
       btn.disabled = true;
@@ -1140,7 +1151,7 @@ function renderIssuerSeriesGroups(groups){
       try{
         const result = await callGeminiExtractFull(buildExtractPrompt(ticker, ''), null, termsEl);
         asTermsCache[ticker] = result;
-        termsEl.innerHTML = summarizeTermsLine(result.data);
+        termsEl.innerHTML = summarizeTermsLine(result.data, result.sources);
       }catch(e){
         termsEl.textContent = describeGeminiError(e);
       }finally{
@@ -1152,18 +1163,26 @@ function renderIssuerSeriesGroups(groups){
 
 // One-line human summary of AI-extracted terms for the issuer-search results
 // (a lighter-weight version of applyFullTermsToManualForm's note, for browsing
-// rather than committing to the form).
-function summarizeTermsLine(full){
+// rather than committing to the form). Always surfaces where the numbers came
+// from — an official issuer source vs. an unconfirmed third-party one matters
+// more here than the numbers themselves, since this is the pick-a-series stage.
+function summarizeTermsLine(full, sources){
   if(!full || (full.currentRate==null && full.type==null)){
-    return '⚠ Could not confidently identify this series\' terms — verify manually.';
+    return '⚠ Could not confidently identify this series\' terms from an official source — verify manually.';
   }
   const bits = [];
-  if(full.currentRate!=null) bits.push(full.currentRate+'% ');
+  if(full.currentRate!=null) bits.push(full.currentRate+'%');
   if(full.type) bits.push(full.type==='reset' ? '5-yr GoC reset' : full.type==='floating' ? '3-mo T-bill float' : 'fixed perpetual');
   if(full.spreadBps!=null) bits.push('+'+(full.spreadBps/100).toFixed(2)+'% spread');
   if(full.nextResetDate) bits.push('next reset '+full.nextResetDate);
   if(full.cumulative!=null) bits.push(full.cumulative ? 'cumulative' : 'non-cumulative');
-  return bits.join(' · ') + ' — verify before saving.';
+  const typeLabel = sourceTypeLabel(full.sourceType);
+  const isOfficial = full.sourceType==='issuer_ir' || full.sourceType==='press_release' || full.sourceType==='prospectus';
+  const sourceHtml = (sources||[]).length
+    ? ' · <span style="color:'+(isOfficial?'var(--teal)':'var(--amber)')+';">source: '+(typeLabel||'unlabeled')+'</span> ('+
+      sources.slice(0,2).map(s=>'<a href="'+s.uri+'" target="_blank" rel="noopener" style="color:var(--teal);">'+(s.title||'link')+'</a>').join(', ')+')'
+    : ' · <span style="color:var(--amber);">no source link returned — verify manually</span>';
+  return bits.join(' · ') + sourceHtml;
 }
 
 let asSearchDebounce = null;
