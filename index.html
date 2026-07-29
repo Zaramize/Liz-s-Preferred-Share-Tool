@@ -1978,27 +1978,27 @@ async function ldrFetchHoldings(){
   if(!fund){ statusEl.textContent = 'Add a fund tab first.'; return; }
   const symbol = fund.replace('.TO','').replace('.V','');
   const targetUrl = 'https://stockanalysis.com/quote/tsx/' + encodeURIComponent(symbol) + '/holdings/';
-  const proxies = [
-    { name:'corsproxy.io', build: u => 'https://corsproxy.io/?url=' + encodeURIComponent(u) },
-    { name:'allorigins', build: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
-    { name:'thingproxy', build: u => 'https://thingproxy.freeboard.io/fetch/' + u },
-    { name:'corsfix', build: u => 'https://proxy.corsfix.com/?' + u }
-  ];
-  let html = null, lastErr = null, usedProxy = null;
-  for(const proxy of proxies){
-    try{
-      statusEl.textContent = 'Trying ' + proxy.name + '…';
-      const res = await fetch(proxy.build(targetUrl));
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      const text = await res.text();
-      if(text && text.includes('<table')){ html = text; usedProxy = proxy.name; break; }
-      throw new Error('no table in response');
-    }catch(err){ lastErr = err; }
-  }
-  if(!html){ statusEl.textContent = 'All proxies failed for ' + symbol + ' (last error: ' + (lastErr?.message||'unknown') + '). Paste holdings manually instead.'; return; }
+
+  // Free third-party CORS proxies (corsproxy.io, allorigins, etc.) restrict their
+  // free tier to sandbox origins (localhost, CodePen, GitHub.io) and 403 on real
+  // production domains — confirmed this doesn't work even on the deployed site.
+  // Using this tracker's own server-side fetch function instead (same pattern as
+  // /api/fetch-page, which already works reliably for IR page lookups) — this
+  // requires adding the functions/api/fetch-holdings.js file to the project.
+  let html = null, lastErr = null;
+  statusEl.textContent = 'Fetching via server-side function…';
+  try{
+    const res = await fetch('/api/fetch-holdings?url=' + encodeURIComponent(targetUrl));
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    if(!data.html || !data.html.includes('<table')) throw new Error('no table in response');
+    html = data.html;
+  }catch(err){ lastErr = err; }
+
+  if(!html){ statusEl.textContent = 'Server-side fetch failed for ' + symbol + ' (' + (lastErr?.message||'unknown error') + '). Make sure functions/api/fetch-holdings.js is deployed, or paste holdings manually instead.'; return; }
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const tables = Array.from(doc.querySelectorAll('table'));
-  if(!tables.length){ statusEl.textContent = 'Fetched via ' + usedProxy + ' but found no table on the page.'; return; }
+  if(!tables.length){ statusEl.textContent = 'Fetched OK but found no table on the page.'; return; }
   const table = tables.sort((a,b) => b.querySelectorAll('tr').length - a.querySelectorAll('tr').length)[0];
   const rows = Array.from(table.querySelectorAll('tbody tr').length ? table.querySelectorAll('tbody tr') : table.querySelectorAll('tr'));
   let added = 0, matched = 0;
@@ -2016,7 +2016,7 @@ async function ldrFetchHoldings(){
     added++;
   });
   ldrSave(); ldrRender();
-  statusEl.textContent = added ? ('Added ' + added + ' holding(s) via ' + usedProxy + ' — ' + matched + ' auto-matched with reset terms, ' + (added-matched) + ' need lookup.') : ('Fetched via ' + usedProxy + ' but parsed no rows — paste manually.');
+  statusEl.textContent = added ? ('Added ' + added + ' holding(s) — ' + matched + ' auto-matched with reset terms, ' + (added-matched) + ' need lookup.') : ('Fetched OK but parsed no rows — paste manually.');
 }
 
 function ldrBulkAdd(target){
