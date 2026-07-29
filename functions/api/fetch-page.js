@@ -1,86 +1,74 @@
-// Cloudflare Pages Function — lives at /api/fetch-page
-// Fetches a page (issuer IR page, press release, etc.) server-side and
-// returns plain text. Free — no AI, no paid API, just an HTML tag strip.
+// functions/api/fetch-holdings.js
+//
+// Server-side fetch for ETF/fund holdings pages (e.g. stockanalysis.com),
+// used by the Ladder Comparator tab's "Fetch top holdings" button.
+//
+// Why this exists: free third-party CORS proxies (corsproxy.io, allorigins,
+// etc.) restrict their free tier to sandbox origins (localhost, CodePen,
+// GitHub.io) and return 403 for real production domains like this site's
+// Cloudflare Pages URL. Fetching server-side, the same way fetch-page.js
+// already does for issuer IR pages, sidesteps that entirely — Cloudflare's
+// edge is making the request, not the visitor's browser, so there's no CORS
+// or proxy-allowlist issue at all.
+//
+// Place this file at functions/api/fetch-holdings.js in the project (same
+// directory as fetch-page.js) and Cloudflare Pages will wire it up to
+// /api/fetch-holdings automatically — no extra config needed.
 
-function stripHtml(html) {
-  let text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    // Close table cells with a separator BEFORE the generic tag-strip below —
-    // otherwise adjacent <td>/<th> cells collapse into one run-on line with no
-    // boundary, which is exactly how a specific series' rate/date/type can get
-    // misattributed to the wrong row on a big multi-series table (e.g. an
-    // issuer with 20+ outstanding series in one table, like Enbridge's).
-    .replace(/<\/(td|th)>/gi, ' | ')
-    .replace(/<(br|p|div|tr|li|h[1-6])[^>]*>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#39;|&rsquo;/g, "'")
-    .replace(/&quot;|&ldquo;|&rdquo;/g, '"')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n\s*\n\s*\n+/g, '\n\n')
-    .trim();
-  return text;
-}
+const ALLOWED_HOSTS = [
+  'stockanalysis.com'
+  // Add more fund-data sources here if you expand beyond stockanalysis.com
+  // (e.g. 'ycharts.com'), keeping this as an explicit allowlist rather than
+  // an open proxy, so this function can't be used to fetch arbitrary URLs.
+];
 
-export async function onRequestGet(context) {
-  const reqUrl = new URL(context.request.url);
-  const targetUrl = reqUrl.searchParams.get('url');
+export async function onRequestGet({ request }) {
+  const { searchParams } = new URL(request.url);
+  const targetUrl = searchParams.get('url');
+
   if (!targetUrl) {
-    return new Response(JSON.stringify({ error: 'missing url query param' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return jsonResponse({ error: 'Missing "url" query parameter.' }, 400);
   }
 
   let parsed;
   try {
     parsed = new URL(targetUrl);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('bad protocol');
   } catch (e) {
-    return new Response(JSON.stringify({ error: 'invalid url' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return jsonResponse({ error: 'Invalid URL.' }, 400);
+  }
+
+  if (!ALLOWED_HOSTS.includes(parsed.hostname)) {
+    return jsonResponse({
+      error: `Host "${parsed.hostname}" is not on the allowlist for this function. ` +
+             `Add it to ALLOWED_HOSTS in functions/api/fetch-holdings.js if you want to fetch from it.`
+    }, 403);
   }
 
   try {
-    const upstream = await fetch(targetUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PreferredShareTracker/1.0)' },
-      redirect: 'follow'
+    const upstream = await fetch(parsed.toString(), {
+      headers: {
+        // A normal browser UA — some fund-data sites block requests with no
+        // UA or an obvious server/bot-style UA string.
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml'
+      }
     });
+
     if (!upstream.ok) {
-      return new Response(JSON.stringify({ error: 'upstream returned ' + upstream.status }), {
-        status: upstream.status,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return jsonResponse({ error: `Upstream returned HTTP ${upstream.status}` }, 502);
     }
-    const contentType = upstream.headers.get('content-type') || '';
-    if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
-      return new Response(JSON.stringify({ error: 'not an HTML page (content-type: ' + contentType + ') — PDFs should go through the PDF tab instead' }), {
-        status: 415,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+
     const html = await upstream.text();
-    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    // Was 50,000 — too aggressive for issuers with 20+ outstanding series in
-    // one table (e.g. Enbridge), where a specific series' row/footnote can
-    // sit well past that point. Gemini's context window comfortably handles
-    // far more than this, so there's little reason to truncate this tightly.
-    const text = stripHtml(html).slice(0, 180000);
-    return new Response(JSON.stringify({ url: targetUrl, title: titleMatch ? titleMatch[1].trim() : null, text }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: 'Failed to fetch that page', detail: String(err) }), {
-      status: 502,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return jsonResponse({ html });
+
+  } catch (e) {
+    return jsonResponse({ error: 'Fetch failed: ' + e.message }, 502);
   }
+}
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }
