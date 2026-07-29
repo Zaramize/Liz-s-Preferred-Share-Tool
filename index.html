@@ -1989,8 +1989,17 @@ async function ldrFetchHoldings(){
   statusEl.textContent = 'Fetching via server-side function…';
   try{
     const res = await fetch('/api/fetch-holdings?url=' + encodeURIComponent(targetUrl));
+    if(!res.ok){
+      // Don't assume the body is JSON — a 404/500 from Cloudflare's own routing
+      // (e.g. function file not found/not deployed) comes back as an HTML page,
+      // and calling res.json() on that throws a confusing "unexpected end of
+      // JSON input" instead of the actual status, which is what we want to see.
+      let bodyText = '';
+      try{ bodyText = await res.text(); }catch(e){}
+      const looksLikeHtml = bodyText.trim().startsWith('<');
+      throw new Error('HTTP ' + res.status + (looksLikeHtml ? ' (got an HTML page back, not JSON — the /api/fetch-holdings route likely isn\'t deployed/found)' : ': ' + bodyText.slice(0,200)));
+    }
     const data = await res.json();
-    if(!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
     if(!data.html || !data.html.includes('<table')) throw new Error('no table in response');
     html = data.html;
   }catch(err){ lastErr = err; }
