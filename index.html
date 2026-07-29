@@ -140,6 +140,77 @@
   .lres-card button.added{color:var(--teal); border-color:#2f5a4d; cursor:default;}
   .loading-txt{color:var(--muted); font-size:12.5px; font-style:italic;}
   .footer-note{color:var(--muted); font-size:11.5px; margin-top:24px; line-height:1.6;}
+
+  /* ===== app-level view switcher (Watchlist vs Ladder Comparator) ===== */
+  .apptabs{display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--border);}
+  .apptab{padding:9px 18px; font-size:13.5px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; font-weight:500;}
+  .apptab.active{color:var(--text); border-bottom-color:var(--teal); font-weight:600;}
+  .appview{display:none;}
+  .appview.active{display:block;}
+
+  /* ===== Ladder Comparator (namespaced under .ldr-scope to avoid clobbering rules above) ===== */
+  .ldr-scope .ldr-layout{display:flex; gap:24px;}
+  .ldr-scope .ldr-sidebar{width:210px; flex-shrink:0;}
+  .ldr-scope .ldr-main{flex:1; min-width:0;}
+  .ldr-scope .ldr-side-title{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:16px 0 8px;}
+  .ldr-scope .ldr-side-title:first-child{margin-top:0;}
+  .ldr-scope .ldr-fund-chip{
+    display:flex; justify-content:space-between; align-items:center;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:6px;
+    padding:7px 10px; margin-bottom:6px; font-size:12px; cursor:pointer;
+  }
+  .ldr-scope .ldr-fund-chip.added{border-color:var(--teal);}
+  .ldr-scope .ldr-fund-chip .name{font-weight:600;}
+  .ldr-scope .ldr-fund-chip .style{color:var(--muted); font-size:10px; display:block;}
+  .ldr-scope .ldr-fund-chip button{background:none; border:none; color:var(--teal); cursor:pointer; font-size:16px; padding:0;}
+  .ldr-scope .ldr-tabs{display:flex; gap:4px; margin-bottom:18px; border-bottom:1px solid var(--border);}
+  .ldr-scope .ldr-tab{padding:8px 16px; font-size:13px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent;}
+  .ldr-scope .ldr-tab.active{color:var(--text); border-bottom-color:var(--teal); font-weight:600;}
+  .ldr-scope .ldr-view{display:none;}
+  .ldr-scope .ldr-view.active{display:block;}
+  .ldr-scope .ldr-panel{background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:18px 20px; margin-bottom:20px;}
+  .ldr-scope .ldr-panel-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;}
+  .ldr-scope .ldr-panel-title{font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);}
+  .ldr-scope .ldr-legend-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px;}
+  .ldr-scope table{font-size:13px;}
+  .ldr-scope td{cursor:pointer;}
+  .ldr-scope tr.ldr-row-selected td{background:#1c2836;}
+  .ldr-scope .ldr-row-actions button, .ldr-scope .ldr-news-link{background:none; border:none; color:var(--red); cursor:pointer; font-size:16px; padding:0 4px; text-decoration:none;}
+  .ldr-scope .ldr-news-link{color:var(--muted); font-size:11px;}
+  .ldr-scope .ldr-add-row{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .ldr-scope .ldr-add-row input{max-width:140px;}
+  .ldr-scope .ldr-add-row button{background:var(--teal); color:#04211c; border:none; border-radius:4px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;}
+  .ldr-scope .ldr-fund-tabs{display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;}
+  .ldr-scope .ldr-fund-tab{background:var(--panel-2); border:1px solid var(--border); color:var(--muted); padding:5px 12px; border-radius:20px; font-size:12px; cursor:pointer;}
+  .ldr-scope .ldr-fund-tab.active{background:var(--amber); color:#2b1608; border-color:var(--amber); font-weight:600;}
+  .ldr-scope .ldr-fund-tab button.del{background:none; border:none; color:inherit; margin-left:4px; cursor:pointer; font-size:12px;}
+  .ldr-scope .ldr-chart{display:flex; align-items:flex-end; gap:18px; height:180px; padding:10px 0 0; border-bottom:1px solid var(--border);}
+  .ldr-scope .ldr-bucket{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:3px;}
+  .ldr-scope .ldr-bars{display:flex; gap:3px; align-items:flex-end; height:100%; width:100%; justify-content:center;}
+  .ldr-scope .ldr-bar{width:16px; border-radius:2px 2px 0 0; position:relative;}
+  .ldr-scope .ldr-bar.mine{background:var(--teal);} .ldr-scope .ldr-bar.ref{background:var(--amber);}
+  .ldr-scope .ldr-bar-val{position:absolute; top:-16px; left:50%; transform:translateX(-50%); font-size:10px; color:var(--muted); white-space:nowrap;}
+  .ldr-scope .ldr-bucket-label{font-size:11px; color:var(--muted); margin-top:6px; font-family:var(--mono);}
+  .ldr-scope .ldr-gaps, .ldr-scope .ldr-conc-list, .ldr-scope .ldr-swap-list{display:flex; flex-direction:column; gap:6px;}
+  .ldr-scope .ldr-gap-item, .ldr-scope .ldr-conc-item, .ldr-scope .ldr-swap-item{display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:var(--panel-2); border-radius:6px; border-left:3px solid var(--red); font-size:13px;}
+  .ldr-scope .ldr-conc-item{border-left-color:var(--amber);}
+  .ldr-scope .ldr-conc-item.ok{border-left-color:var(--teal);}
+  .ldr-scope .ldr-swap-item{border-left-color:var(--teal); cursor:pointer;}
+  .ldr-scope .ldr-swap-item:hover{background:#22303f;}
+  .ldr-scope .ldr-gap-item .yr, .ldr-scope .ldr-conc-item .name{font-family:var(--mono); color:var(--text); font-weight:600;}
+  .ldr-scope .ldr-gap-item .detail, .ldr-scope .ldr-conc-item .detail, .ldr-scope .ldr-swap-item .detail{color:var(--muted); font-size:12px;}
+  .ldr-scope .ldr-empty{color:var(--muted); font-size:13px; padding:10px 0;}
+  .ldr-scope .ldr-helper{font-size:12px; color:var(--muted); background:var(--panel-2); border-radius:6px; padding:10px 12px; margin-top:10px; line-height:1.5;}
+  .ldr-scope .ldr-helper b{color:var(--text);}
+  .ldr-scope .ldr-ladder-wrap{display:flex; flex-direction:column; gap:2px;}
+  .ldr-scope .ldr-rung{display:flex; align-items:center; gap:10px; border-bottom:1px solid #1a212b; padding:10px 0;}
+  .ldr-scope .ldr-rung-year{width:50px; flex-shrink:0; font-family:var(--mono); font-weight:600; color:var(--text); font-size:13px;}
+  .ldr-scope .ldr-rung-chips{display:flex; flex-wrap:wrap; gap:6px; flex:1;}
+  .ldr-scope .ldr-chip{border-radius:5px; padding:4px 9px; font-size:11px; cursor:default; white-space:nowrap;}
+  .ldr-scope .ldr-chip.mine{background:var(--teal); color:#04211c;}
+  .ldr-scope .ldr-chip.ref{background:var(--amber); color:#2b1608;}
+  .ldr-scope .ldr-chip b{font-weight:700;}
+  .ldr-scope select#ldr-diagram-fund-select{width:auto; display:inline-block;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
@@ -148,6 +219,13 @@
 </head>
 <body>
 <div class="wrap">
+
+  <div class="apptabs">
+    <div class="apptab active" data-view="watchlist">Watchlist</div>
+    <div class="apptab" data-view="ladder">Ladder Comparator</div>
+  </div>
+
+  <div class="appview active" id="appview-watchlist">
 
   <header>
     <div>
@@ -325,6 +403,118 @@
     Prices: Yahoo Finance (free, no API key). Reference rates: Bank of Canada Valet API (5-yr benchmark bond yield, 3-mo T-bill), also free. Issuer/IR lookups fetch the page text server-side and apply simple pattern-matching guesses — no paid AI calls anywhere in this version. Always verify guessed terms against the actual page/document before saving.
     Yield-to-reset assumes the share price converges to par ($25 typical) at the next reset/call date — the standard simplifying assumption for Canadian rate-reset preferreds, not a guarantee the issuer calls it. Always confirm terms against the prospectus before trading.
   </div>
+  </div><!-- /appview-watchlist -->
+
+  <div class="appview ldr-scope" id="appview-ladder">
+    <div class="ldr-layout">
+      <div class="ldr-sidebar">
+        <div class="ldr-side-title">Reference Fund Universe</div>
+        <div id="ldr-universe-list"></div>
+        <div class="ldr-side-title">Added to Comparison</div>
+        <div id="ldr-added-list"></div>
+      </div>
+
+      <div class="ldr-main">
+        <h1>Ladder Comparator</h1>
+        <div class="sub" style="margin-bottom:20px;">Your preferred share ladder vs. how reference funds structure theirs. No client data — tickers and public fund holdings only.</div>
+
+        <div class="ldr-tabs">
+          <div class="ldr-tab active" data-ldrtab="comparator">Comparator</div>
+          <div class="ldr-tab" data-ldrtab="diagram">Ladder Diagram</div>
+        </div>
+
+        <div class="ldr-view active" id="ldr-view-comparator">
+          <div class="ldr-panel">
+            <div class="ldr-panel-header"><div class="ldr-panel-title"><span class="ldr-legend-dot" style="background:var(--teal)"></span>Your Ladder</div></div>
+            <table>
+              <thead><tr><th>Ticker</th><th>Issuer</th><th>Reset Yr</th><th>Spread %</th><th>Floor %</th><th>Weight %</th><th></th></tr></thead>
+              <tbody id="ldr-mine-body"></tbody>
+            </table>
+            <div class="ldr-add-row">
+              <input type="text" id="ldr-m-ticker" placeholder="Ticker e.g. BCE.PR.K">
+              <input type="text" id="ldr-m-issuer" placeholder="Issuer">
+              <input type="number" id="ldr-m-year" placeholder="Reset Yr">
+              <input type="number" id="ldr-m-spread" placeholder="Spread %" step="0.01">
+              <input type="number" id="ldr-m-floor" placeholder="Floor %" step="0.01">
+              <input type="number" id="ldr-m-weight" placeholder="Weight %" step="0.1">
+              <button onclick="ldrAddRow('mine')">Add</button>
+            </div>
+            <details style="margin-top:10px;">
+              <summary style="cursor:pointer; font-size:12px; color:var(--muted);">Bulk paste (CSV: ticker,issuer,year,spread,floor,weight)</summary>
+              <div class="ldr-add-row" style="margin-top:8px;">
+                <textarea id="ldr-m-bulk" rows="4" style="width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:6px; font-family:var(--mono); font-size:12px;" placeholder="BCE.PR.K,BCE Inc,2026,1.88,,2.51"></textarea>
+              </div>
+              <button onclick="ldrBulkAdd('mine')" style="background:var(--teal); color:#04211c; border:none; border-radius:4px; padding:6px 14px; font-size:12px; font-weight:600; cursor:pointer; margin-top:6px;">Import rows</button>
+            </details>
+          </div>
+
+          <div class="ldr-panel">
+            <div class="ldr-panel-header"><div class="ldr-panel-title"><span class="ldr-legend-dot" style="background:var(--amber)"></span>Reference Fund</div></div>
+            <div class="ldr-fund-tabs" id="ldr-fund-tabs"></div>
+            <div class="ldr-add-row" style="margin-bottom:12px;">
+              <input type="text" id="ldr-new-fund" placeholder="Add fund (e.g. ZPR, CPD, HPR)" style="max-width:200px">
+              <button onclick="ldrAddFund()">Add Fund</button>
+              <button onclick="ldrFetchHoldings()" style="background:var(--amber); color:#2b1608;">Fetch top holdings</button>
+              <span id="ldr-fetch-status" style="font-size:12px; color:var(--muted); align-self:center;"></span>
+            </div>
+            <table>
+              <thead><tr><th>Ticker</th><th>Issuer</th><th>Reset Yr</th><th>Spread %</th><th>Floor %</th><th>Weight %</th><th></th><th></th></tr></thead>
+              <tbody id="ldr-ref-body"></tbody>
+            </table>
+            <div class="ldr-add-row">
+              <input type="text" id="ldr-r-ticker" placeholder="Ticker e.g. TRP.PR.C">
+              <input type="text" id="ldr-r-issuer" placeholder="Issuer">
+              <input type="number" id="ldr-r-year" placeholder="Reset Yr">
+              <input type="number" id="ldr-r-spread" placeholder="Spread %" step="0.01">
+              <input type="number" id="ldr-r-floor" placeholder="Floor %" step="0.01">
+              <input type="number" id="ldr-r-weight" placeholder="Weight %" step="0.1">
+              <button onclick="ldrAddRow('ref')">Add</button>
+            </div>
+            <details style="margin-top:10px;">
+              <summary style="cursor:pointer; font-size:12px; color:var(--muted);">Bulk paste (CSV: ticker,issuer,year,spread,floor,weight)</summary>
+              <div class="ldr-add-row" style="margin-top:8px;">
+                <textarea id="ldr-r-bulk" rows="6" style="width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:6px; font-family:var(--mono); font-size:12px;" placeholder="BCE.PR.K,BCE Inc,2026,1.88,,2.51"></textarea>
+              </div>
+              <button onclick="ldrBulkAdd('ref')" style="background:var(--amber); color:#2b1608; border:none; border-radius:4px; padding:6px 14px; font-size:12px; font-weight:600; cursor:pointer; margin-top:6px;">Import rows</button>
+            </details>
+            <div class="ldr-helper"><b>Tip:</b> click any row to see swap candidates for it below. Weights come live from stockanalysis.com; reset/spread/floor auto-fill when the ticker is in our researched library, otherwise they're blank until looked up.</div>
+          </div>
+
+          <div class="ldr-panel" id="ldr-swap-panel" style="display:none;">
+            <div class="ldr-panel-header"><div class="ldr-panel-title">Swap Candidates for <span id="ldr-swap-target-name"></span></div></div>
+            <div class="ldr-swap-list" id="ldr-swap-list"></div>
+          </div>
+
+          <div class="ldr-panel">
+            <div class="ldr-panel-header"><div class="ldr-panel-title">Concentration &amp; Risk — <span id="ldr-conc-fund-name"></span></div></div>
+            <div class="ldr-conc-list" id="ldr-conc-list"></div>
+          </div>
+
+          <div class="ldr-panel">
+            <div class="ldr-panel-header"><div class="ldr-panel-title">Reset Year Distribution — <span id="ldr-chart-fund-name">Mine</span> vs <span id="ldr-chart-ref-name">Reference</span></div></div>
+            <div class="ldr-chart" id="ldr-chart"></div>
+          </div>
+
+          <div class="ldr-panel">
+            <div class="ldr-panel-header"><div class="ldr-panel-title">Gaps — years the reference fund covers that you don't</div></div>
+            <div class="ldr-gaps" id="ldr-gaps"></div>
+          </div>
+        </div>
+
+        <div class="ldr-view" id="ldr-view-diagram">
+          <div class="ldr-panel">
+            <div class="ldr-panel-header">
+              <div class="ldr-panel-title">Ladder Diagram</div>
+              <div>Compare against: <select id="ldr-diagram-fund-select" onchange="ldrRenderDiagram()"></select></div>
+            </div>
+            <div class="ldr-helper" style="margin-top:0; margin-bottom:14px;">Each rung is a reset year. Hover a chip for its prospectus summary, spread, and floor. Teal = your ladder, amber = reference fund.</div>
+            <div class="ldr-ladder-wrap" id="ldr-ladder-wrap"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /appview-ladder -->
+
 </div>
 
 <div class="overlay" id="overlay">
@@ -332,6 +522,18 @@
 </div>
 
 <script>
+// ============================================================================
+// APP-LEVEL VIEW SWITCHER (Watchlist <-> Ladder Comparator)
+// ============================================================================
+function switchAppView(name){
+  document.querySelectorAll('.apptab').forEach(t => t.classList.toggle('active', t.dataset.view === name));
+  document.getElementById('appview-watchlist').classList.toggle('active', name === 'watchlist');
+  document.getElementById('appview-ladder').classList.toggle('active', name === 'ladder');
+}
+document.querySelectorAll('.apptab').forEach(t=>{
+  t.onclick = ()=> switchAppView(t.dataset.view);
+});
+
 const STORE_KEY = 'holdings-v1';
 let holdings = [];
 let refRates = { goc5yr: null, tbill3mo: null, updated: null };
@@ -459,14 +661,13 @@ function currentYield(h, price){
   return (annualDiv/price)*100;
 }
 
-// IRR via bisection: cashflow = -price now, then quarterly coupon for n quarters, plus par at final quarter
 function yieldToReset(h, price){
   if(!h.nextResetDate) return null;
   const now = new Date();
   const reset = new Date(h.nextResetDate+'T00:00:00');
   if(reset <= now) return null;
   const n = Math.max(1, Math.round(quartersBetween(now, reset)));
-  const q = h.par*(h.currentRate/100)/4; // quarterly coupon
+  const q = h.par*(h.currentRate/100)/4;
 
   function npv(rQuarterly){
     let v = -price;
@@ -478,7 +679,6 @@ function yieldToReset(h, price){
     return v;
   }
   let lo=-0.5, hi=1.0, mid;
-  // ensure sign change
   if(npv(lo)*npv(hi) > 0) return null;
   for(let i=0;i<80;i++){
     mid = (lo+hi)/2;
@@ -490,35 +690,25 @@ function yieldToReset(h, price){
   return annualized;
 }
 
-// Projected running yield AFTER reset, on your CURRENT price — distinct from
-// yieldToReset() above, which blends income with an assumed capital gain/loss
-// as price converges to par. This one assumes NO price convergence: it just
-// projects what the new coupon rate would be (today's reference rate + this
-// series' spread) and expresses it as a % of current price, so it answers
-// "if I buy today and rates stay where they are, what's my running yield
-// after the reset actually happens?" — useful for laddering since it's not
-// contaminated by a redemption-at-par assumption.
 function yieldAtReset(h, price, refOverride){
   const rr = refOverride || refRates;
   if(h.spreadBps == null) return null;
   let refRate = null;
   if(h.type === 'reset') refRate = rr.goc5yr;
   else if(h.type === 'floating') refRate = rr.tbill3mo;
-  else return null; // perpetuals don't reset
+  else return null;
   if(refRate == null) return null;
-  const projectedNewRate = refRate + (h.spreadBps/100); // % of par
+  const projectedNewRate = refRate + (h.spreadBps/100);
   const projectedAnnualDiv = h.par * (projectedNewRate/100);
   return (projectedAnnualDiv/price)*100;
 }
-// Same as projectedNewRate above but returned directly (% of par) — used by
-// the stress test to show $ income impact, not just a yield-on-price number.
 function projectedNewCouponRate(h, refOverride){
   const rr = refOverride || refRates;
   if(h.spreadBps == null) return null;
   let refRate = null;
   if(h.type === 'reset') refRate = rr.goc5yr;
   else if(h.type === 'floating') refRate = rr.tbill3mo;
-  else return h.currentRate; // perpetuals: rate never changes
+  else return h.currentRate;
   if(refRate == null) return null;
   return refRate + (h.spreadBps/100);
 }
@@ -543,9 +733,6 @@ function daysUntil(dateStr){
   return Math.round(daysBetween(new Date(), d));
 }
 
-// Portfolio weight per holding, by current market value (shares × price).
-// Only holdings with `shares` set participate — if nobody has shares filled
-// in, every weight comes back null and the column just shows dashes.
 function computeWeights(){
   const values = holdings.map(h=>{
     if(h.shares == null) return null;
@@ -557,9 +744,6 @@ function computeWeights(){
   return values.map(v => (v==null || total<=0) ? null : (v/total)*100);
 }
 
-// Compact one-line term summary shown under the issuer name in the watchlist
-// table, so the structure of a holding is visible without opening the detail
-// card — spread, reference rate type, and cumulative status at a glance.
 function termSummaryLine(h){
   const bits = [];
   if(h.type==='reset') bits.push('5-yr GoC'+(h.spreadBps!=null?'+'+(h.spreadBps/100).toFixed(2)+'%':''));
@@ -607,7 +791,7 @@ function renderTable(){
       <td style="text-align:right;"><button class="ghost row-remove-btn" title="Remove ${h.ticker} from watchlist" style="padding:4px 9px; color:var(--red); border-color:#4a2020;">✕</button></td>
     `;
     tr.querySelector('.row-remove-btn').onclick = async (e)=>{
-      e.stopPropagation(); // don't also open the detail overlay
+      e.stopPropagation();
       if(!confirm('Remove '+h.ticker+' from your watchlist?')) return;
       holdings.splice(idx,1);
       await saveHoldings();
@@ -813,8 +997,6 @@ async function extractPdfText(file){
   return full;
 }
 
-// Lightweight pattern guesses only — not AI, just regexes over the extracted text.
-// Always labelled as guesses; the user reviews the raw text themselves before saving.
 const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
 function monthNameDateToIso(m){
   const mi = MONTHS.indexOf(m[1].toLowerCase());
@@ -859,8 +1041,6 @@ function findAllTickersInText(text, prefixes){
     (guesses.date ? '<br>Nearest future-ish date found: <b>'+guesses.date+'</b>' : '')+
     (guesses.cumulative!=null ? '<br>Cumulative wording: <b>'+(guesses.cumulative?'cumulative':'non-cumulative')+'</b>' : '');
 }
-// Shared prefill: copies guesses into the Manual entry form so the user only
-// has to review/correct fields rather than retype everything from scratch.
 function applyGuessesToManualForm(guesses, sourceName){
   if(guesses.ticker) document.getElementById('m_ticker').value = guesses.ticker;
   if(guesses.rate!=null) document.getElementById('m_rate').value = guesses.rate;
@@ -874,15 +1054,8 @@ function applyGuessesToManualForm(guesses, sourceName){
   document.querySelector('.tab[data-tab="manual"]').click();
 }
 
-// ---------- optional: AI-assisted extraction via Google's free-tier Gemini API ----------
-// Requires the person to set up their own free GEMINI_API_KEY (see SETUP.md).
-// Not used anywhere automatically — only fires when the "Parse with AI" button is clicked.
 function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
-// Shared low-level call to /api/gemini-proxy — handles the fetch, error
-// classification (quota/transient), and returns the raw {text, modelUsed}.
-// Both the JSON-extraction path and the freeform chat path build on this
-// instead of duplicating error handling with two different quality levels.
 async function callGeminiProxyRaw(bodyPayload){
   const resp = await fetch('/api/gemini-proxy', {
     method:'POST',
@@ -901,7 +1074,7 @@ async function callGeminiProxyRaw(bodyPayload){
     err.quotaExceeded = /exceeded your current quota|quota exceeded/i.test(msg);
     throw err;
   }
-  return data; // { text, modelUsed, sources }
+  return data;
 }
 async function callGeminiExtractOnce(prompt, inlineData){
   const data = await callGeminiProxyRaw({ prompt, inlineData: inlineData || null });
@@ -916,9 +1089,6 @@ async function callGeminiExtractOnce(prompt, inlineData){
   return { data: parsed, sources: data.sources || [] };
 }
 
-// Scans for the first balanced {...} object, respecting string literals so
-// braces inside quoted values (e.g. a series description) don't throw off
-// the match — safer than a greedy regex when the model appends extra text.
 function extractFirstJsonObject(text){
   const start = text.indexOf('{');
   if(start === -1) return null;
@@ -938,9 +1108,6 @@ function extractFirstJsonObject(text){
   return null;
 }
 
-// Retries automatically on transient overload (503) or rate-limit (429) errors —
-// Gemini's free tier gets deprioritized under load, so a short backoff-and-retry
-// clears most of these without the person needing to click the button again.
 async function callGeminiExtractFull(prompt, inlineData, statusEl){
   const delays = [1500, 3000, 6000];
   let lastErr;
@@ -956,19 +1123,6 @@ async function callGeminiExtractFull(prompt, inlineData, statusEl){
   }
   throw lastErr;
 }
-// Builds an extraction prompt targeted at a specific security when known.
-// Instructs the model to verify via live Google Search (grounding is enabled
-// server-side) rather than trust the pasted TEXT alone — the TEXT can be a
-// page listing many series at once, which is exactly what caused a wrong
-// series' numbers getting picked before. Search results and issuer press
-// releases should win over the pasted TEXT if they disagree.
-// IMPORTANT: this proxy's backend (gemini-proxy.js) does NOT enable Google
-// Search grounding (that quota requires billing on the Google Cloud project,
-// and was deliberately left off — see the comment at the top of that file).
-// So this prompt must never claim the model can search the web — it can only
-// extract from whatever TEXT is actually passed in. Getting an official
-// source means the CALLER fetched an official page/PDF and passed its text
-// here; this function has no way to go find one itself.
 function buildExtractPrompt(targetHint, text){
   return 'You are extracting the CURRENT contractual dividend terms of a specific Canadian preferred share, '+
     'from the TEXT below ONLY. You have no live internet access — do not rely on prior knowledge of this '+
@@ -986,15 +1140,9 @@ function buildExtractPrompt(targetHint, text){
     '\nReply with ONLY a JSON object, no markdown, no commentary, in this exact shape: '+
     '{"ticker":"TSX ticker like ENB.PF.A if stated, else null","issuer":"issuer legal name or null","seriesName":"e.g. Cumulative Redeemable Preference Shares, Series 9, or null","type":"reset|floating|perpetual or null","par":25.00,'+
     '"currentRate":5.67,"spreadBps":266,"lastResetDate":"YYYY-MM-DD or null","nextResetDate":"YYYY-MM-DD or null","cumulative":true or false or null,"convertsTo":"short description or null"}.\n\n'+
-    // Was 30,000 — too tight for issuers with 20+ series in one table (the
-    // specific series a user wants can sit well past that point in the text).
     'TEXT:\n'+text.slice(0, 150000);
 }
 
-// Fuller prefill (all fields, not just the regex guess subset) for AI-extracted terms.
-// Flags implausible values rather than silently filling them in — a preferred
-// share's coupon is realistically in the low single digits to low teens, and
-// a "reset" type without a spread is a sign the extraction missed something.
 function sanityCheckTerms(full){
   const warnings = [];
   if(full.currentRate!=null && (full.currentRate < 0.5 || full.currentRate > 20)){
@@ -1009,10 +1157,6 @@ function sanityCheckTerms(full){
   }
   return warnings;
 }
-// sourceType is set by whichever caller fetched the TEXT that got passed to
-// Gemini — NOT reported by the model itself. Gemini has no live search here
-// (see the note above buildExtractPrompt), so it can't verify its own source;
-// only the code that actually fetched the page/PDF knows where it came from.
 function sourceTypeLabel(t){
   return { issuer_ir:'issuer IR page', prospectus_pdf:'uploaded PDF', pasted_page:'fetched page (unverified official-ness)' }[t] || null;
 }
@@ -1041,9 +1185,6 @@ function applyFullTermsToManualForm(full, sourceName, sourceType, sourceUrl){
   document.querySelector('.tab[data-tab="manual"]').click();
 }
 
-// Gives a cause-specific message rather than a generic one — quota exhaustion
-// needs different guidance (wait for daily reset) than a missing key or a
-// genuine parse failure (both fixable right now).
 function describeGeminiError(e){
   if(e.quotaExceeded){
     return 'Gemini\u2019s free daily quota is used up for now — this resets daily (roughly midnight Pacific time), not something retrying right now will fix. Use pattern guesses or manual entry in the meantime.';
@@ -1100,14 +1241,7 @@ document.getElementById('p_go').onclick = async ()=>{
   }
 };
 
-// ---------- issuer IR page lookup (free — curated URL list + server-side fetch, no AI) ----------
-// Each issuer is seeded with a verified URL. Most point to a page dedicated
-// specifically to preferred shares/terms (no `note` field). A few issuers
-// don't have a dedicated preferred-share page on their site at all — those
-// carry a `note` explaining what the URL actually is, which gets surfaced to
-// the user wherever that issuer's terms are shown, so it's clear the source
-// is weaker than the norm before trusting anything extracted from it.
-// Add more by appending { name, aliases, tickerPrefixes, url, note? }.
+// ---------- issuer IR page lookup ----------
 const KNOWN_ISSUERS = [
   { name: 'Enbridge Inc.', aliases: ['enbridge', 'enb'], tickerPrefixes: ['ENB'], url: 'https://www.enbridge.com/investment-center/stock-and-dividend-information/preferred-hybrid-shares' },
   { name: 'Royal Bank of Canada', aliases: ['rbc', 'royal bank', 'ry'], tickerPrefixes: ['RY'], url: 'https://www.rbc.com/investor-relations/share-information.html' },
@@ -1213,9 +1347,6 @@ document.getElementById('l_go').onclick = async ()=>{
     if(seriesTickers.length){
         seriesListEl.style.display = 'block';
         seriesListEl.innerHTML = '<div class="src-note" style="margin-bottom:6px;">Series found on this page (' + seriesTickers.length + '):</div><div class="loading-txt">Loading series descriptions…</div>';
-        // Look up each ticker's full descriptive name (e.g. "Series 9", "cumulative", rate)
-        // from the TSX symbol directory so multiple series are distinguishable at a glance
-        // instead of just a bare ticker list.
         let nameByTicker = {};
         try{
           const symbols = await ensureTsxSymbols(null);
@@ -1259,13 +1390,8 @@ document.getElementById('l_go').onclick = async ()=>{
   }
 };
 
-// ---------- issuer search: ALL outstanding preferred series (TSX symbol directory) ----------
-// Unlike the single-URL "Look up issuer" tab above, this pulls TSX's full public
-// symbol directory (via /api/tsx-symbols, which fetches it server-side) and lets
-// the user search any issuer by name to see every outstanding series at once,
-// not just whatever a single IR page happened to list.
-
-let tsxSymbolsCache = null; // [{ticker, name, exchange}, ...] once loaded
+// ---------- issuer search: ALL outstanding preferred series ----------
+let tsxSymbolsCache = null;
 
 async function ensureTsxSymbols(statusEl){
   if(tsxSymbolsCache) return tsxSymbolsCache;
@@ -1282,8 +1408,6 @@ function isPreferredTicker(ticker){
   return /\.(PR|PF)\.[A-Z0-9]+$/.test(ticker);
 }
 
-// Groups matching common-share issuers with all of their preferred series
-// (matched by shared base ticker, e.g. ENB -> ENB.PF.A, ENB.PR.B, ...).
 function findIssuerPreferredGroups(symbols, query){
   const q = query.trim().toLowerCase();
   if(q.length < 2) return [];
@@ -1300,23 +1424,15 @@ function findIssuerPreferredGroups(symbols, query){
     const preferreds = symbols.filter(s => isPreferredTicker(s.ticker) && s.ticker.split('.')[0] === base);
     if(preferreds.length) groups.push({ commonTicker: common.ticker, issuerName: common.name, preferreds });
   });
-  return groups.slice(0, 15); // keep results manageable for a live-typing search
+  return groups.slice(0, 15);
 }
 
 function tickerToElId(ticker){ return ticker.replace(/[^A-Za-z0-9]/g,'_'); }
 
-// Caches for the lifetime of the page — avoid re-fetching/re-parsing if the
-// user re-types the same issuer search or clicks the same series twice.
-let asTermsCache = {};   // ticker -> { data, sourceType, sourceUrl } | { error }
-let asPriceCache = {};   // ticker -> price | null
-let irPageTextCache = {}; // issuer name -> fetched page text (shared across all of that issuer's series)
+let asTermsCache = {};
+let asPriceCache = {};
+let irPageTextCache = {};
 
-// Fetches the issuer's real IR page (only issuers in KNOWN_ISSUERS have one on
-// file) and asks Gemini to extract THIS specific ticker's terms from that real
-// text — this is the only honest way to get "official source" data, since
-// gemini-proxy.js has no live web search (see the note above buildExtractPrompt).
-// Returns { data, sourceType:'issuer_ir', sourceUrl } on success, or
-// { error } if there's no known IR URL for this issuer or the fetch/parse failed.
 async function fetchOfficialTermsForTicker(ticker, issuerName){
   if(asTermsCache[ticker]) return asTermsCache[ticker];
   const base = ticker.split('.')[0];
@@ -1377,9 +1493,6 @@ function renderIssuerSeriesGroups(groups){
       '</div>';
   }).join('');
 
-  // "Use →" now auto-runs the real IR-page lookup if it hasn't been done yet for
-  // this ticker, instead of silently sending an empty form (the earlier bug) —
-  // it shows a spinner in place of the button while that happens.
   el.querySelectorAll('[data-add-ticker]').forEach(btn=>{
     btn.onclick = async ()=>{
       const ticker = btn.dataset.addTicker;
@@ -1410,8 +1523,6 @@ function renderIssuerSeriesGroups(groups){
     };
   });
 
-  // Fire off a live price check per row (cheap, existing Yahoo proxy) so the
-  // user has at least one real signal to eyeball before picking a series.
   const allTickers = groups.flatMap(g => g.preferreds.map(p => p.ticker));
   allTickers.forEach(async ticker=>{
     const elId = tickerToElId(ticker);
@@ -1431,8 +1542,6 @@ function renderIssuerSeriesGroups(groups){
     }
   });
 
-  // "What is this?" — fetches the real IR page (if known) and extracts just
-  // this series' terms from it, showing the result + real source link inline.
   el.querySelectorAll('[data-ai-ticker]').forEach(btn=>{
     btn.onclick = async ()=>{
       const ticker = btn.dataset.aiTicker;
@@ -1454,11 +1563,6 @@ function renderIssuerSeriesGroups(groups){
   });
 }
 
-// One-line human summary for the issuer-search results (a lighter-weight
-// version of applyFullTermsToManualForm's note, for browsing rather than
-// committing to the form). sourceType/sourceUrl/note are caller-supplied
-// (from fetchOfficialTermsForTicker) — Gemini has no live search here, so it
-// can never self-report where a number came from; only the fetch code knows.
 function summarizeTermsLine(full, sourceType, sourceUrl, error, note){
   if(error){
     return '<span style="color:var(--amber);">⚠ '+error+'</span>';
@@ -1519,7 +1623,7 @@ function mapStructureType(t){
   if(t==='rate-reset') return 'reset';
   if(t==='floating') return 'floating';
   if(t==='perpetual') return 'perpetual';
-  return 'reset'; // default assumption when script couldn't confidently classify
+  return 'reset';
 }
 
 function renderImportCard(item){
@@ -1652,8 +1756,6 @@ document.getElementById('sc_calc').onclick = ()=>{
   const gocInput = parseFloat(document.getElementById('sc_goc').value);
   const tbillInput = parseFloat(document.getElementById('sc_tbill').value);
   if(isNaN(price) || price<=0){ document.getElementById('sc_result').innerHTML = '<span style="color:var(--amber);">Enter a valid price.</span>'; return; }
-  // Build a hypothetical holding using real.type/par/nextResetDate/cumulative
-  // (structural terms) but whatever rate/spread the user typed in.
   const hypo = Object.assign({}, real, {
     currentRate: isNaN(rate) ? real.currentRate : rate,
     spreadBps: isNaN(spread) ? real.spreadBps : spread
@@ -1693,7 +1795,7 @@ document.getElementById('st_run').onclick = ()=>{
   const rowsHtml = holdings.map(h=>{
     const price = h.manualPrice != null ? h.manualPrice : h.price;
     const currentIncomePerShare = h.par * (h.currentRate/100);
-    const projRate = projectedNewCouponRate(h, shifted); // % of par, null if not applicable
+    const projRate = projectedNewCouponRate(h, shifted);
     const projIncomePerShare = projRate != null ? h.par * (projRate/100) : null;
     const yarShifted = price != null ? yieldAtReset(h, price, shifted) : null;
     if(h.shares != null){
@@ -1725,7 +1827,7 @@ document.getElementById('st_run').onclick = ()=>{
 };
 
 // ==================== Scenarios: chat about the ladder ====================
-let chatHistory = []; // [{role:'user'|'assistant', text}]
+let chatHistory = [];
 function buildPortfolioContextForChat(){
   const lines = holdings.map(h=>{
     const price = h.manualPrice != null ? h.manualPrice : h.price;
@@ -1766,7 +1868,7 @@ async function sendChatMessage(){
     const data = await callGeminiProxyRaw({
       prompt: text,
       systemInstruction: systemInstruction,
-      history: chatHistory.slice(0,-2).map(m=>({role:m.role, text:m.text})), // exclude the placeholder + this new user turn (sent separately as prompt)
+      history: chatHistory.slice(0,-2).map(m=>({role:m.role, text:m.text})),
       jsonMode: false
     });
     chatHistory[chatHistory.length-1] = { role:'assistant', text: data.text || '(empty response)' };
@@ -1793,6 +1895,396 @@ document.getElementById('chat_input').addEventListener('keydown', (e)=>{
   await refreshAll();
   startAuto();
 })();
+</script>
+
+<script>
+// ============================================================================
+// LADDER COMPARATOR — fully namespaced (ldr* prefix) so nothing here can
+// collide with the Preferred Share Tracker's globals above (e.g. its own
+// renderTable, .tabs/.tab styling, etc). Runs independently, persists to its
+// own localStorage key, and is only visually hidden/shown by switchAppView().
+// ============================================================================
+const LDR_STORE_KEY = 'ladder-comparator-v1';
+
+function ldrLoad(){
+  try{ const raw = localStorage.getItem(LDR_STORE_KEY); if(raw) return JSON.parse(raw); }catch(e){}
+  return { mine: [], funds: { 'ZPR': [] }, activeFund: 'ZPR' };
+}
+let ldrState = ldrLoad();
+if(!ldrState.funds) ldrState.funds = {'ZPR':[]};
+if(!ldrState.activeFund) ldrState.activeFund = Object.keys(ldrState.funds)[0];
+let ldrSelected = null;
+
+function ldrSave(){ localStorage.setItem(LDR_STORE_KEY, JSON.stringify(ldrState)); }
+
+const LDR_FUND_UNIVERSE = [
+  { symbol:'ZPR', style:'Passive, laddered' },
+  { symbol:'HLPR', style:'Passive, laddered, same index as ZPR' },
+  { symbol:'CPD', style:'Passive, broad market' },
+  { symbol:'HPR', style:'Active manager' },
+  { symbol:'RPF', style:'Active manager' }
+];
+
+const LDR_TICKER_MAP = [
+  { issuer:'bce', series:'ak', ticker:'BCE.PR.K', year:2026, spread:1.88, floor:null,
+    summary:'BCE Cumulative Redeemable First Pfd Series AK. Resets every 5 yrs to GOC-5yr + 1.88%. No stated floor. Issuer-redeemable at $25 on reset dates.' },
+  { issuer:'tc energy', series:'5', ticker:'TRP.PR.C', year:2030, spread:1.54, floor:null,
+    summary:'TC Energy Cumulative Redeemable 1st Pfd Series 5 (TRP.PR.C). FixedReset, GOC-5yr + 1.54%. Holder-interconvertible with floating-rate TRP.PR.I on reset dates.' },
+  { issuer:'enbridge', series:'11', ticker:'ENB.PF.C', year:2030, spread:null, floor:null,
+    summary:'Enbridge Cumulative Redeemable Preference Shares Series 11 (ENB.PF.C). Resets every 5 yrs (next Mar 1 2030). Holder-interconvertible with floating Series 12.' }
+];
+
+function ldrMatchTicker(name){
+  const n = (name||'').toLowerCase();
+  for(const entry of LDR_TICKER_MAP){
+    if(n.includes(entry.issuer) && n.split(' ').some(w => w.replace(/[^a-z0-9]/g,'') === entry.series)) return entry;
+  }
+  return null;
+}
+
+function ldrNewsUrl(ticker, issuer){
+  const q = encodeURIComponent((issuer||'') + ' ' + ticker + ' preferred share');
+  return 'https://news.google.com/search?q=' + q;
+}
+
+document.querySelectorAll('.ldr-tab').forEach(t=>{
+  t.onclick = ()=> ldrSwitchTab(t.dataset.ldrtab);
+});
+function ldrSwitchTab(name){
+  document.querySelectorAll('.ldr-tab').forEach(t => t.classList.toggle('active', t.dataset.ldrtab === name));
+  document.getElementById('ldr-view-comparator').classList.toggle('active', name === 'comparator');
+  document.getElementById('ldr-view-diagram').classList.toggle('active', name === 'diagram');
+  if(name === 'diagram') ldrRenderDiagram();
+}
+
+function ldrAddRow(target){
+  const prefix = target === 'mine' ? 'ldr-m' : 'ldr-r';
+  const ticker = document.getElementById(prefix+'-ticker').value.trim();
+  const issuer = document.getElementById(prefix+'-issuer').value.trim();
+  const year = parseInt(document.getElementById(prefix+'-year').value);
+  const spread = parseFloat(document.getElementById(prefix+'-spread').value);
+  const floor = parseFloat(document.getElementById(prefix+'-floor').value);
+  const weight = parseFloat(document.getElementById(prefix+'-weight').value);
+  if(!ticker || !year){ alert('Ticker and reset year are required.'); return; }
+  const entry = { ticker, issuer, year, spread: isNaN(spread)?null:spread, floor: isNaN(floor)?null:floor, weight: isNaN(weight)?0:weight };
+  if(target === 'mine') ldrState.mine.push(entry); else ldrState.funds[ldrState.activeFund].push(entry);
+  ['ticker','issuer','year','spread','floor','weight'].forEach(f => document.getElementById(prefix+'-'+f).value = '');
+  ldrSave(); ldrRender();
+}
+
+async function ldrFetchHoldings(){
+  const statusEl = document.getElementById('ldr-fetch-status');
+  const fund = ldrState.activeFund;
+  if(!fund){ statusEl.textContent = 'Add a fund tab first.'; return; }
+  const symbol = fund.replace('.TO','').replace('.V','');
+  const targetUrl = 'https://stockanalysis.com/quote/tsx/' + encodeURIComponent(symbol) + '/holdings/';
+  const proxies = [
+    { name:'corsproxy.io', build: u => 'https://corsproxy.io/?url=' + encodeURIComponent(u) },
+    { name:'allorigins', build: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+    { name:'thingproxy', build: u => 'https://thingproxy.freeboard.io/fetch/' + u },
+    { name:'corsfix', build: u => 'https://proxy.corsfix.com/?' + u }
+  ];
+  let html = null, lastErr = null, usedProxy = null;
+  for(const proxy of proxies){
+    try{
+      statusEl.textContent = 'Trying ' + proxy.name + '…';
+      const res = await fetch(proxy.build(targetUrl));
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      if(text && text.includes('<table')){ html = text; usedProxy = proxy.name; break; }
+      throw new Error('no table in response');
+    }catch(err){ lastErr = err; }
+  }
+  if(!html){ statusEl.textContent = 'All proxies failed for ' + symbol + ' (last error: ' + (lastErr?.message||'unknown') + '). Paste holdings manually instead.'; return; }
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const tables = Array.from(doc.querySelectorAll('table'));
+  if(!tables.length){ statusEl.textContent = 'Fetched via ' + usedProxy + ' but found no table on the page.'; return; }
+  const table = tables.sort((a,b) => b.querySelectorAll('tr').length - a.querySelectorAll('tr').length)[0];
+  const rows = Array.from(table.querySelectorAll('tbody tr').length ? table.querySelectorAll('tbody tr') : table.querySelectorAll('tr'));
+  let added = 0, matched = 0;
+  rows.forEach(tr => {
+    const cells = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim());
+    if(cells.length < 4) return;
+    const symbolRaw = cells[1], name = cells[2], weightRaw = cells[3];
+    const weight = parseFloat((weightRaw||'').replace('%',''));
+    if(!symbolRaw || isNaN(weight)) return;
+    const ref = ldrMatchTicker(name);
+    const ticker = ref ? ref.ticker : symbolRaw;
+    if(ldrState.funds[fund].some(r => r.ticker === ticker)) return;
+    if(ref){ ldrState.funds[fund].push({ ticker: ref.ticker, issuer: name||'', year: ref.year, spread: ref.spread, floor: ref.floor, weight }); matched++; }
+    else { ldrState.funds[fund].push({ ticker: symbolRaw, issuer: name||'', year: null, spread: null, floor: null, weight }); }
+    added++;
+  });
+  ldrSave(); ldrRender();
+  statusEl.textContent = added ? ('Added ' + added + ' holding(s) via ' + usedProxy + ' — ' + matched + ' auto-matched with reset terms, ' + (added-matched) + ' need lookup.') : ('Fetched via ' + usedProxy + ' but parsed no rows — paste manually.');
+}
+
+function ldrBulkAdd(target){
+  const ta = document.getElementById(target === 'mine' ? 'ldr-m-bulk' : 'ldr-r-bulk');
+  const lines = ta.value.split('\n').map(l => l.trim()).filter(Boolean);
+  let added = 0;
+  lines.forEach(line => {
+    const parts = line.split(',').map(p => p.trim());
+    if(parts.length < 3) return;
+    const ticker = parts[0], issuer = parts[1], year = parts[2], spread = parts[3], floor = parts[4], weight = parts[5];
+    if(!ticker || !year) return;
+    const entry = { ticker, issuer: issuer||'', year: parseInt(year), spread: spread?parseFloat(spread):null, floor: floor?parseFloat(floor):null, weight: weight?parseFloat(weight):0 };
+    if(target === 'mine') ldrState.mine.push(entry); else ldrState.funds[ldrState.activeFund].push(entry);
+    added++;
+  });
+  ta.value = ''; ldrSave(); ldrRender();
+  if(added) alert('Imported ' + added + ' row(s).');
+}
+
+function ldrDeleteRow(target, idx, ev){
+  if(ev) ev.stopPropagation();
+  if(target === 'mine') ldrState.mine.splice(idx,1); else ldrState.funds[ldrState.activeFund].splice(idx,1);
+  if(ldrSelected && ldrSelected.target===target && ldrSelected.idx===idx) ldrSelected = null;
+  ldrSave(); ldrRender();
+}
+
+function ldrSelectRow(target, idx){
+  ldrSelected = { target, idx };
+  ldrRender();
+}
+
+function ldrAddFund(name){
+  const finalName = (name || document.getElementById('ldr-new-fund').value.trim()).toUpperCase();
+  if(!finalName) return;
+  if(!ldrState.funds[finalName]) ldrState.funds[finalName] = [];
+  ldrState.activeFund = finalName;
+  document.getElementById('ldr-new-fund').value = '';
+  ldrSave(); ldrRender();
+}
+
+function ldrDeleteFund(name, ev){
+  ev.stopPropagation();
+  if(!confirm('Remove fund "'+name+'" and its holdings?')) return;
+  delete ldrState.funds[name];
+  const remaining = Object.keys(ldrState.funds);
+  ldrState.activeFund = remaining.length ? remaining[0] : null;
+  if(!ldrState.activeFund){ ldrState.funds['ZPR'] = []; ldrState.activeFund = 'ZPR'; }
+  ldrSave(); ldrRender();
+}
+
+function ldrSwitchFund(name){ ldrState.activeFund = name; ldrSave(); ldrRender(); }
+
+function ldrRenderTable(bodyId, rows, target){
+  const body = document.getElementById(bodyId);
+  body.innerHTML = '';
+  if(!rows || !rows.length){
+    body.innerHTML = '<tr><td colspan="8" class="ldr-empty">No holdings yet — add some above.</td></tr>';
+    return;
+  }
+  rows.forEach((r, idx) => {
+    const tr = document.createElement('tr');
+    if(ldrSelected && ldrSelected.target===target && ldrSelected.idx===idx) tr.classList.add('ldr-row-selected');
+    tr.onclick = () => ldrSelectRow(target, idx);
+    let rowHtml = '<td>'+r.ticker+'</td><td>'+(r.issuer||'—')+'</td><td>'+(r.year||'—')+'</td>' +
+      '<td>'+(r.spread!=null? r.spread.toFixed(2)+'%':'—')+'</td>' +
+      '<td>'+(r.floor!=null? r.floor.toFixed(2)+'%':'—')+'</td>' +
+      '<td>'+(r.weight? r.weight.toFixed(1)+'%':'—')+'</td>';
+    if(target==='ref') rowHtml += '<td><a class="ldr-news-link" href="'+ldrNewsUrl(r.ticker,r.issuer)+'" target="_blank" onclick="event.stopPropagation()">news ↗</a></td>';
+    rowHtml += '<td class="ldr-row-actions"><button onclick="ldrDeleteRow(\''+target+'\','+idx+',event)">×</button></td>';
+    tr.innerHTML = rowHtml;
+    body.appendChild(tr);
+  });
+}
+
+function ldrRenderFundTabs(){
+  const wrap = document.getElementById('ldr-fund-tabs');
+  wrap.innerHTML = '';
+  Object.keys(ldrState.funds).forEach(name => {
+    const tab = document.createElement('div');
+    tab.className = 'ldr-fund-tab' + (name === ldrState.activeFund ? ' active' : '');
+    tab.onclick = () => ldrSwitchFund(name);
+    tab.innerHTML = name + ' <button class="del" onclick="ldrDeleteFund(\''+name+'\', event)">×</button>';
+    wrap.appendChild(tab);
+  });
+}
+
+function ldrRenderSidebar(){
+  const uni = document.getElementById('ldr-universe-list');
+  uni.innerHTML = '';
+  LDR_FUND_UNIVERSE.forEach(f => {
+    const added = !!ldrState.funds[f.symbol];
+    const chip = document.createElement('div');
+    chip.className = 'ldr-fund-chip' + (added ? ' added' : '');
+    chip.onclick = () => { if(!added) ldrAddFund(f.symbol); else ldrSwitchFund(f.symbol); };
+    chip.innerHTML = '<div><div class="name">'+f.symbol+'</div><span class="style">'+f.style+'</span></div><button>'+(added?'✓':'+')+'</button>';
+    uni.appendChild(chip);
+  });
+  const added = document.getElementById('ldr-added-list');
+  added.innerHTML = '';
+  const names = Object.keys(ldrState.funds);
+  if(!names.length){ added.innerHTML = '<div class="ldr-empty" style="font-size:11px;">None yet</div>'; return; }
+  names.forEach(name => {
+    const chip = document.createElement('div');
+    chip.className = 'ldr-fund-chip' + (name===ldrState.activeFund?' added':'');
+    chip.onclick = () => ldrSwitchFund(name);
+    chip.innerHTML = '<div class="name">'+name+'</div><span style="color:var(--muted); font-size:11px;">'+((ldrState.funds[name]||[]).length)+' holdings</span>';
+    added.appendChild(chip);
+  });
+}
+
+function ldrBucketByYear(rows){
+  const map = {};
+  (rows||[]).forEach(r => { map[r.year] = (map[r.year]||0) + (r.weight||0); });
+  return map;
+}
+
+function ldrRenderChart(){
+  const mineMap = ldrBucketByYear(ldrState.mine);
+  const refRows = ldrState.funds[ldrState.activeFund] || [];
+  const refMap = ldrBucketByYear(refRows);
+  document.getElementById('ldr-chart-ref-name').textContent = ldrState.activeFund || 'Reference';
+  const years = Array.from(new Set([...Object.keys(mineMap), ...Object.keys(refMap)])).map(Number).filter(y=>!isNaN(y)).sort((a,b)=>a-b);
+  const chart = document.getElementById('ldr-chart');
+  chart.innerHTML = '';
+  if(!years.length){ chart.innerHTML = '<div class="ldr-empty">Add holdings to both sides to see the comparison.</div>'; return; }
+  const maxVal = Math.max(1, ...years.map(y => Math.max(mineMap[y]||0, refMap[y]||0)));
+  years.forEach(y => {
+    const mv = mineMap[y]||0, rv = refMap[y]||0;
+    const bucket = document.createElement('div');
+    bucket.className = 'ldr-bucket';
+    bucket.innerHTML = '<div class="ldr-bars">' +
+        '<div class="ldr-bar mine" style="height:'+((mv/maxVal*130)||0)+'px">'+(mv?'<div class="ldr-bar-val">'+mv.toFixed(1)+'%</div>':'')+'</div>' +
+        '<div class="ldr-bar ref" style="height:'+((rv/maxVal*130)||0)+'px">'+(rv?'<div class="ldr-bar-val">'+rv.toFixed(1)+'%</div>':'')+'</div>' +
+      '</div><div class="ldr-bucket-label">'+y+'</div>';
+    chart.appendChild(bucket);
+  });
+}
+
+function ldrRenderGaps(){
+  const mineMap = ldrBucketByYear(ldrState.mine);
+  const refRows = ldrState.funds[ldrState.activeFund] || [];
+  const refMap = ldrBucketByYear(refRows);
+  const gapsEl = document.getElementById('ldr-gaps');
+  gapsEl.innerHTML = '';
+  const gapYears = Object.keys(refMap).map(Number).filter(y => !mineMap[y] || mineMap[y] < 1).sort((a,b) => refMap[b]-refMap[a]);
+  if(!gapYears.length){ gapsEl.innerHTML = '<div class="ldr-empty">No gaps found (or no data yet).</div>'; return; }
+  gapYears.forEach(y => {
+    const holdersInYear = refRows.filter(r => r.year === y).sort((a,b)=>(b.weight||0)-(a.weight||0));
+    const names = holdersInYear.slice(0,3).map(r => r.ticker).join(', ');
+    const div = document.createElement('div');
+    div.className = 'ldr-gap-item';
+    div.innerHTML = '<div><span class="yr">'+y+'</span> <span class="detail">— '+ldrState.activeFund+' holds '+refMap[y].toFixed(1)+'% here, you hold '+(mineMap[y]||0).toFixed(1)+'%</span></div><div class="detail">'+names+'</div>';
+    gapsEl.appendChild(div);
+  });
+}
+
+function ldrRenderConcentration(){
+  const refRows = ldrState.funds[ldrState.activeFund] || [];
+  document.getElementById('ldr-conc-fund-name').textContent = ldrState.activeFund || '—';
+  const list = document.getElementById('ldr-conc-list');
+  list.innerHTML = '';
+  if(!refRows.length){ list.innerHTML = '<div class="ldr-empty">No holdings yet for this fund.</div>'; return; }
+  const byIssuer = {};
+  refRows.forEach(r => { const key = r.issuer || r.ticker; byIssuer[key] = (byIssuer[key]||0) + (r.weight||0); });
+  const sorted = Object.entries(byIssuer).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const THRESHOLD = 8;
+  sorted.forEach(entry => {
+    const issuer = entry[0], weight = entry[1];
+    const concentrated = weight >= THRESHOLD;
+    const div = document.createElement('div');
+    div.className = 'ldr-conc-item' + (concentrated ? '' : ' ok');
+    div.innerHTML = '<div><span class="name">'+issuer+'</span> <span class="detail">'+(concentrated ? '— concentrated (≥'+THRESHOLD+'% threshold)' : '')+'</span></div><div class="detail">'+weight.toFixed(1)+'% of tracked holdings</div>';
+    list.appendChild(div);
+  });
+  const note = document.createElement('div');
+  note.className = 'ldr-helper';
+  note.innerHTML = "<b>Note:</b> based only on holdings you've added/fetched for this fund, not its full published portfolio. Threshold (8%) is a rule of thumb, not the fund's actual limit.";
+  list.appendChild(note);
+}
+
+function ldrRenderSwapPanel(){
+  const panel = document.getElementById('ldr-swap-panel');
+  if(!ldrSelected){ panel.style.display = 'none'; return; }
+  const row = (ldrSelected.target==='mine' ? ldrState.mine : ldrState.funds[ldrState.activeFund])[ldrSelected.idx];
+  if(!row){ panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  document.getElementById('ldr-swap-target-name').textContent = row.ticker + ' (' + (row.issuer||'—') + ', ' + (row.year||'?') + ')';
+  const swapList = document.getElementById('ldr-swap-list');
+  swapList.innerHTML = '';
+  const currentTickers = new Set([...ldrState.mine, ...(ldrState.funds[ldrState.activeFund]||[])].map(r=>r.ticker));
+  const candidates = LDR_TICKER_MAP.filter(t => {
+    if(t.ticker === row.ticker) return false;
+    if(currentTickers.has(t.ticker)) return false;
+    if(!row.year || !t.year) return true;
+    return Math.abs(t.year - row.year) <= 1;
+  });
+  if(!candidates.length){
+    swapList.innerHTML = '<div class="ldr-empty">No alternatives in the researched ticker library yet for this reset-year range — ask me to look up more issuers near ' + (row.year||'this year') + '.</div>';
+    return;
+  }
+  candidates.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'ldr-swap-item';
+    div.onclick = () => {
+      const target = confirm('Add ' + c.ticker + ' to your ladder? (Cancel adds it to ' + ldrState.activeFund + ' instead)') ? 'mine' : 'ref';
+      const entry = { ticker:c.ticker, issuer:c.issuer, year:c.year, spread:c.spread, floor:c.floor, weight:0 };
+      if(target==='mine') ldrState.mine.push(entry); else ldrState.funds[ldrState.activeFund].push(entry);
+      ldrSave(); ldrRender();
+    };
+    div.innerHTML = '<div><span class="name" style="font-family:var(--mono)">'+c.ticker+'</span> <span class="detail">— resets '+c.year+', +'+(c.spread!=null?c.spread+'%':'?')+'</span></div><div class="detail">click to add</div>';
+    swapList.appendChild(div);
+  });
+}
+
+function ldrPopulateDiagramSelect(){
+  const sel = document.getElementById('ldr-diagram-fund-select');
+  const current = sel.value;
+  sel.innerHTML = '';
+  Object.keys(ldrState.funds).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    sel.appendChild(opt);
+  });
+  if(Object.keys(ldrState.funds).includes(current)) sel.value = current;
+  else sel.value = ldrState.activeFund;
+}
+
+function ldrRenderDiagram(){
+  ldrPopulateDiagramSelect();
+  const fundName = document.getElementById('ldr-diagram-fund-select').value || ldrState.activeFund;
+  const refRows = ldrState.funds[fundName] || [];
+  const wrap = document.getElementById('ldr-ladder-wrap');
+  wrap.innerHTML = '';
+  const years = Array.from(new Set([...ldrState.mine, ...refRows].map(r=>r.year))).filter(y=>y).sort((a,b)=>a-b);
+  if(!years.length){ wrap.innerHTML = '<div class="ldr-empty">Add holdings with reset years to see the diagram.</div>'; return; }
+
+  function chipTitle(r){
+    const m = LDR_TICKER_MAP.find(t => t.ticker === r.ticker);
+    if(m) return m.summary;
+    return r.ticker + ' — spread ' + (r.spread!=null?r.spread+'%':'unknown') + ', floor ' + (r.floor!=null?r.floor+'%':'none') + '. No researched summary yet.';
+  }
+
+  years.forEach(y => {
+    const mineHere = ldrState.mine.filter(r => r.year === y);
+    const refHere = refRows.filter(r => r.year === y);
+    const rung = document.createElement('div');
+    rung.className = 'ldr-rung';
+    let chips = '';
+    mineHere.forEach(r => { chips += '<span class="ldr-chip mine" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight?r.weight.toFixed(1)+'%':'')+'</span>'; });
+    refHere.forEach(r => { chips += '<span class="ldr-chip ref" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight?r.weight.toFixed(1)+'%':'')+'</span>'; });
+    rung.innerHTML = '<div class="ldr-rung-year">'+y+'</div><div class="ldr-rung-chips">'+(chips || '<span class="ldr-empty" style="padding:0;">empty rung</span>')+'</div>';
+    wrap.appendChild(rung);
+  });
+}
+
+function ldrRender(){
+  ldrRenderSidebar();
+  ldrRenderTable('ldr-mine-body', ldrState.mine, 'mine');
+  ldrRenderFundTabs();
+  ldrRenderTable('ldr-ref-body', ldrState.funds[ldrState.activeFund], 'ref');
+  ldrRenderSwapPanel();
+  ldrRenderConcentration();
+  ldrRenderChart();
+  ldrRenderGaps();
+  if(document.getElementById('ldr-view-diagram').classList.contains('active')) ldrRenderDiagram();
+}
+
+ldrRender();
 </script>
 </body>
 </html>
