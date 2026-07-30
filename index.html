@@ -1930,8 +1930,14 @@ const LDR_TICKER_MAP = [
     summary:'BCE Cumulative Redeemable First Pfd Series AK. Resets every 5 yrs to GOC-5yr + 1.88%. No stated floor. Issuer-redeemable at $25 on reset dates.' },
   { issuer:'tc energy', series:'5', ticker:'TRP.PR.C', year:2030, spread:1.54, floor:null,
     summary:'TC Energy Cumulative Redeemable 1st Pfd Series 5 (TRP.PR.C). FixedReset, GOC-5yr + 1.54%. Holder-interconvertible with floating-rate TRP.PR.I on reset dates.' },
-  { issuer:'enbridge', series:'11', ticker:'ENB.PF.C', year:2030, spread:null, floor:null,
-    summary:'Enbridge Cumulative Redeemable Preference Shares Series 11 (ENB.PF.C). Resets every 5 yrs (next Mar 1 2030). Holder-interconvertible with floating Series 12.' }
+  { issuer:'enbridge', series:'11', ticker:'ENB.PF.C', year:2030, spread:2.64, floor:null,
+    summary:'Enbridge Cumulative Redeemable Preference Shares Series 11 (ENB.PF.C). GOC-5yr + 2.64% (confirmed via Enbridge press release, Jan 30 2025). Resets every 5 yrs, next Mar 1 2030. Holder-interconvertible with floating Series 12.' },
+  { issuer:'national bank', series:'38', ticker:'NA.PR.C', year:2027, spread:3.43, floor:null,
+    summary:'National Bank Non-Cumulative 5-Yr Rate Reset 1st Pfd Series 38 NVCC (NA.PR.C). GOC-5yr + 3.43%. Resets every 5 yrs, next Nov 15 2027. Non-cumulative.' },
+  { issuer:'brookfield', series:'42', ticker:'BN.PF.G', year:2030, spread:2.84, floor:null,
+    summary:'Brookfield Corp Cumulative Class A Pref Series 42 (BN.PF.G). GOC-5yr + 2.84%. Resets every 5 yrs, next Jul 1 2030. Holder-interconvertible with floating Series 43.' },
+  { issuer:'intact', series:'3', ticker:'IFC.PR.C', year:2026, spread:2.66, floor:null,
+    summary:'Intact Financial Non-Cumulative Rate Reset Class A Series 3 (IFC.PR.C). GOC-5yr + 2.66%. Resets every 5 yrs, next Sep 30 2026. Non-cumulative.' }
 ];
 
 function ldrMatchTicker(name){
