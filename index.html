@@ -1926,19 +1926,24 @@ const LDR_FUND_UNIVERSE = [
 ];
 
 const LDR_TICKER_MAP = [
-  { issuer:'bce', series:'ak', ticker:'BCE.PR.K', year:2026, spread:1.88, floor:null,
-    summary:'BCE Cumulative Redeemable First Pfd Series AK. Resets every 5 yrs to GOC-5yr + 1.88%. No stated floor. Issuer-redeemable at $25 on reset dates.' },
-  { issuer:'tc energy', series:'5', ticker:'TRP.PR.C', year:2030, spread:1.54, floor:null,
-    summary:'TC Energy Cumulative Redeemable 1st Pfd Series 5 (TRP.PR.C). FixedReset, GOC-5yr + 1.54%. Holder-interconvertible with floating-rate TRP.PR.I on reset dates.' },
-  { issuer:'enbridge', series:'11', ticker:'ENB.PF.C', year:2030, spread:2.64, floor:null,
-    summary:'Enbridge Cumulative Redeemable Preference Shares Series 11 (ENB.PF.C). GOC-5yr + 2.64% (confirmed via Enbridge press release, Jan 30 2025). Resets every 5 yrs, next Mar 1 2030. Holder-interconvertible with floating Series 12.' },
-  { issuer:'national bank', series:'38', ticker:'NA.PR.C', year:2027, spread:3.43, floor:null,
-    summary:'National Bank Non-Cumulative 5-Yr Rate Reset 1st Pfd Series 38 NVCC (NA.PR.C). GOC-5yr + 3.43%. Resets every 5 yrs, next Nov 15 2027. Non-cumulative.' },
-  { issuer:'brookfield', series:'42', ticker:'BN.PF.G', year:2030, spread:2.84, floor:null,
-    summary:'Brookfield Corp Cumulative Class A Pref Series 42 (BN.PF.G). GOC-5yr + 2.84%. Resets every 5 yrs, next Jul 1 2030. Holder-interconvertible with floating Series 43.' },
-  { issuer:'intact', series:'3', ticker:'IFC.PR.C', year:2026, spread:2.66, floor:null,
-    summary:'Intact Financial Non-Cumulative Rate Reset Class A Series 3 (IFC.PR.C). GOC-5yr + 2.66%. Resets every 5 yrs, next Sep 30 2026. Non-cumulative.' }
+  { issuer:'bce', series:'ak', ticker:'BCE.PR.K', year:2026, spread:1.88, floor:null, confidence:'confirmed',
+    summary:'BCE Cumulative Redeemable First Pfd Series AK. Resets every 5 yrs to GOC-5yr + 1.88%. No stated floor. Issuer-redeemable at $25 on reset dates. Source: prospectus/press release.' },
+  { issuer:'tc energy', series:'5', ticker:'TRP.PR.C', year:2030, spread:1.54, floor:null, confidence:'confirmed',
+    summary:'TC Energy Cumulative Redeemable 1st Pfd Series 5 (TRP.PR.C). FixedReset, GOC-5yr + 1.54%. Holder-interconvertible with floating-rate TRP.PR.I on reset dates. Source: prospectus/press release.' },
+  { issuer:'enbridge', series:'11', ticker:'ENB.PF.C', year:2030, spread:2.64, floor:null, confidence:'confirmed',
+    summary:'Enbridge Cumulative Redeemable Preference Shares Series 11 (ENB.PF.C). GOC-5yr + 2.64%. Resets every 5 yrs, next Mar 1 2030. Holder-interconvertible with floating Series 12. Source: Enbridge press release, Jan 30 2025.' },
+  { issuer:'national bank', series:'38', ticker:'NA.PR.C', year:2027, spread:3.43, floor:null, confidence:'confirmed',
+    summary:'National Bank Non-Cumulative 5-Yr Rate Reset 1st Pfd Series 38 NVCC (NA.PR.C). GOC-5yr + 3.43%. Resets every 5 yrs, next Nov 15 2027. Non-cumulative. Source: National Bank press release, Oct 17 2022.' },
+  { issuer:'brookfield', series:'42', ticker:'BN.PF.G', year:2030, spread:2.84, floor:null, confidence:'confirmed',
+    summary:'Brookfield Corp Cumulative Class A Pref Series 42 (BN.PF.G). GOC-5yr + 2.84%. Resets every 5 yrs, next Jul 1 2030. Holder-interconvertible with floating Series 43. Source: bn.brookfield.com official IR page.' },
+  { issuer:'intact', series:'3', ticker:'IFC.PR.C', year:2026, spread:2.66, floor:null, confidence:'confirmed',
+    summary:'Intact Financial Non-Cumulative Rate Reset Class A Series 3 (IFC.PR.C). GOC-5yr + 2.66%. Resets every 5 yrs, next Sep 30 2026. Non-cumulative. Source: Intact official shareholder-info document.' }
 ];
+
+function ldrConfidenceLabel(entry){
+  if(!entry) return '';
+  return entry.confidence === 'estimated' ? ' [ESTIMATED — verify before use]' : '';
+}
 
 function ldrMatchTicker(name){
   const n = (name||'').toLowerCase();
@@ -2270,8 +2275,12 @@ function ldrRenderDiagram(){
 
   function chipTitle(r){
     const m = LDR_TICKER_MAP.find(t => t.ticker === r.ticker);
-    if(m) return m.summary;
+    if(m) return m.summary + ldrConfidenceLabel(m);
     return r.ticker + ' — spread ' + (r.spread!=null?r.spread+'%':'unknown') + ', floor ' + (r.floor!=null?r.floor+'%':'none') + '. No researched summary yet.';
+  }
+  function chipEstimated(r){
+    const m = LDR_TICKER_MAP.find(t => t.ticker === r.ticker);
+    return m && m.confidence === 'estimated';
   }
 
   years.forEach(y => {
@@ -2280,8 +2289,8 @@ function ldrRenderDiagram(){
     const rung = document.createElement('div');
     rung.className = 'ldr-rung';
     let chips = '';
-    mineHere.forEach(r => { chips += '<span class="ldr-chip mine" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight?r.weight.toFixed(1)+'%':'')+'</span>'; });
-    refHere.forEach(r => { chips += '<span class="ldr-chip ref" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight?r.weight.toFixed(1)+'%':'')+'</span>'; });
+    mineHere.forEach(r => { chips += '<span class="ldr-chip mine" style="'+(chipEstimated(r)?'border:1px dashed #ffffff88;':'')+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight?r.weight.toFixed(1)+'%':'')+(chipEstimated(r)?' ~':'')+'</span>'; });
+    refHere.forEach(r => { chips += '<span class="ldr-chip ref" style="'+(chipEstimated(r)?'border:1px dashed #ffffff88;':'')+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight?r.weight.toFixed(1)+'%':'')+(chipEstimated(r)?' ~':'')+'</span>'; });
     rung.innerHTML = '<div class="ldr-rung-year">'+y+'</div><div class="ldr-rung-chips">'+(chips || '<span class="ldr-empty" style="padding:0;">empty rung</span>')+'</div>';
     wrap.appendChild(rung);
   });
