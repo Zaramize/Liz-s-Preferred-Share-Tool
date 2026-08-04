@@ -212,6 +212,8 @@
   .ldr-scope .ldr-chip.unconfirmed{opacity:0.55;}
   .ldr-scope .ldr-chip:hover{opacity:1; box-shadow:0 0 0 1px #ffffff55;}
   .ldr-scope .ldr-chip b{font-weight:700;}
+  .ldr-scope .ldr-rung-perpetual{border-bottom:none; border-top:1px solid #333; margin-top:6px; padding-top:14px;}
+  .ldr-scope .ldr-rung-perpetual .ldr-rung-year{color:var(--text); font-size:11px; font-weight:600;}
   .ldr-scope .ldr-rung-unconfirmed{border-bottom:none; border-top:1px dashed #333; margin-top:6px; padding-top:14px;}
   .ldr-scope .ldr-rung-unconfirmed .ldr-rung-year{color:var(--muted); font-size:11px; font-weight:500;}
   .ldr-scope select#ldr-diagram-fund-select{width:auto; display:inline-block;}
@@ -2426,18 +2428,22 @@ function ldrRenderSwapPanel(){
   const row = (ldrSelected.target==='mine' ? ldrState.mine : ldrState.funds[ldrState.activeFund])[ldrSelected.idx];
   if(!row){ panel.style.display = 'none'; return; }
   panel.style.display = 'block';
-  document.getElementById('ldr-swap-target-name').textContent = row.ticker + ' (' + (row.issuer||'—') + ', ' + (row.year||'?') + ')';
+  document.getElementById('ldr-swap-target-name').textContent = row.ticker + ' (' + (row.issuer||'—') + ', ' + (row.year || (row.structure==='perpetual' ? 'perpetual' : '?')) + ')';
   const swapList = document.getElementById('ldr-swap-list');
   swapList.innerHTML = '';
   const currentTickers = new Set([...ldrState.mine, ...(ldrState.funds[ldrState.activeFund]||[])].map(r=>r.ticker));
   const candidates = LDR_TICKER_MAP.filter(t => {
     if(t.ticker === row.ticker) return false;
     if(currentTickers.has(t.ticker)) return false;
-    if(!row.year) return false; // unconfirmed maturity — nothing to match against yet
+    if(!row.year) return false; // unconfirmed or perpetual — nothing to match against yet
     return t.year === row.year;
   });
+  if(row.structure === 'perpetual'){
+    swapList.innerHTML = '<div class="ldr-empty">This is a fixed-rate perpetual — it has no reset year, so there\'s no "same-year" swap to show. Perpetuals aren\'t part of the ladder-by-maturity comparison.</div>';
+    return;
+  }
   if(!row.year){
-    swapList.innerHTML = '<div class="ldr-empty">This holding\'s reset year isn\'t confirmed yet — set it in the diagram view (click its chip) to see same-year swap candidates.</div>';
+    swapList.innerHTML = '<div class="ldr-empty">This holding\'s maturity isn\'t confirmed yet — set it in the diagram view (click its chip) to see same-year swap candidates.</div>';
     return;
   }
   if(!candidates.length){
@@ -2481,26 +2487,28 @@ function ldrRenderDiagram(){
   const wrap = document.getElementById('ldr-ladder-wrap');
   wrap.innerHTML = '';
 
-  // IMPORTANT: every holding gets a slot here, whether or not we've confirmed
-  // its reset year. Previous versions filtered to `r.year` truthy before
-  // building rungs, which silently dropped any holding not already matched in
-  // LDR_TICKER_MAP (the small researched-issuer list) — since that list only
-  // covers a handful of series, that meant only 2-4 of a fund's ~25 holdings
-  // ever showed up in this diagram, even though all 25 were correctly stored.
-  // Now unmatched holdings get their own "Unconfirmed" rung instead of
-  // vanishing, and clicking one lets you set its reset year on the spot.
+  // Every holding gets a slot here. There are now three real states, not two:
+  //   - a confirmed reset year -> its numbered rung
+  //   - structure:'perpetual' -> the Perpetual rung (a permanent fact, not a
+  //     gap — a fixed-rate perpetual share never resets, so "no year" here
+  //     is the correct, final answer, not something waiting on research)
+  //   - neither -> Unconfirmed (we genuinely don't know yet)
+  // These used to be collapsed into one "no year = unconfirmed" bucket,
+  // which misrepresented every true perpetual as an open research item.
   const mineWithIdx = ldrState.mine.map((r,i)=>({r,i,target:'mine'}));
   const refWithIdx = refRows.map((r,i)=>({r,i,target:'ref'}));
   const all = [...mineWithIdx, ...refWithIdx];
   if(!all.length){ wrap.innerHTML = '<div class="ldr-empty">Add or fetch holdings to see the diagram.</div>'; return; }
 
   const years = Array.from(new Set(all.filter(x=>x.r.year).map(x=>x.r.year))).sort((a,b)=>a-b);
-  const unconfirmed = all.filter(x=>!x.r.year);
+  const perpetual = all.filter(x=>!x.r.year && x.r.structure === 'perpetual');
+  const unconfirmed = all.filter(x=>!x.r.year && x.r.structure !== 'perpetual');
 
   function chipTitle(r){
     const m = LDR_TICKER_MAP.find(t => t.ticker === r.ticker);
     if(m) return m.summary + ldrConfidenceLabel(m);
     if(r.year) return r.ticker + ' — spread ' + (r.spread!=null?r.spread+'%':'unknown') + ', floor ' + (r.floor!=null?r.floor+'%':'none') + '. No researched summary yet — click to edit.';
+    if(r.structure === 'perpetual') return r.ticker + (r.issuer?' ('+r.issuer+')':'') + ' — fixed-rate perpetual, no reset date. Weight ' + (r.weight!=null?r.weight.toFixed(1)+'%':'unknown') + '. Click to edit.';
     return r.ticker + (r.issuer?' ('+r.issuer+')':'') + ' — reset year not yet confirmed. Weight ' + (r.weight!=null?r.weight.toFixed(1)+'%':'unknown') + '. Click to set it.';
   }
   function chipSourceTier(r){
@@ -2510,14 +2518,16 @@ function ldrRenderDiagram(){
   function chipHtml(x){
     const r = x.r;
     const tier = chipSourceTier(r);
-    const cls = 'ldr-chip ' + (x.target==='mine'?'mine':'ref') + (!r.year ? ' unconfirmed' : '');
+    const isPerpetual = !r.year && r.structure === 'perpetual';
+    const cls = 'ldr-chip ' + (x.target==='mine'?'mine':'ref') + (!r.year && !isPerpetual ? ' unconfirmed' : '');
     // Visible, not just on-hover: aggregator-sourced entries get a dashed
     // amber border + "3rd-party" tag; estimated ones keep the existing
     // dashed white + "~"; primary-confirmed entries get no extra marking.
     let borderStyle = '', badge = '';
     if(tier === 'aggregator'){ borderStyle = 'border:1px dashed #e8a33d;'; badge = ' 3rd-party'; }
     else if(tier === 'estimated'){ borderStyle = 'border:1px dashed #ffffff88;'; badge = ' ~'; }
-    return '<span class="'+cls+'" data-target="'+x.target+'" data-idx="'+x.i+'" style="'+borderStyle+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight!=null?r.weight.toFixed(1)+'%':'')+badge+(!r.year?' ?':'')+'</span>';
+    const marker = isPerpetual ? '' : (!r.year ? ' ?' : '');
+    return '<span class="'+cls+'" data-target="'+x.target+'" data-idx="'+x.i+'" style="'+borderStyle+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight!=null?r.weight.toFixed(1)+'%':'')+badge+marker+'</span>';
   }
 
   years.forEach(y => {
@@ -2530,6 +2540,13 @@ function ldrRenderDiagram(){
     wrap.appendChild(rung);
   });
 
+  if(perpetual.length){
+    const rung = document.createElement('div');
+    rung.className = 'ldr-rung ldr-rung-perpetual';
+    rung.innerHTML = '<div class="ldr-rung-year">Perpetual ('+perpetual.length+')</div><div class="ldr-rung-chips">'+perpetual.map(chipHtml).join('')+'</div>';
+    wrap.appendChild(rung);
+  }
+
   if(unconfirmed.length){
     const rung = document.createElement('div');
     rung.className = 'ldr-rung ldr-rung-unconfirmed';
@@ -2537,23 +2554,29 @@ function ldrRenderDiagram(){
     wrap.appendChild(rung);
   }
 
-  // Click a chip: if it has no confirmed year yet, prompt for one (moves it
-  // into the right rung on next render); either way, select it so the swap
-  // panel below shows same-reset-year alternatives.
+  // Click a chip: if it has no confirmed year yet, prompt for one — or let
+  // the person mark it permanently as a fixed-rate perpetual instead, which
+  // moves it to the Perpetual rung rather than leaving it unconfirmed.
   wrap.querySelectorAll('.ldr-chip').forEach(chip => {
     chip.onclick = () => {
       const target = chip.dataset.target, idx = parseInt(chip.dataset.idx, 10);
       const row = (target==='mine' ? ldrState.mine : ldrState.funds[fundName])[idx];
       if(!row) return;
       if(!row.year){
-        const y = prompt('Set reset year for ' + row.ticker + (row.issuer?' ('+row.issuer+')':'') + ' — from the prospectus/IR page (leave blank to skip):', '');
-        if(y && !isNaN(parseInt(y,10))){
+        const y = prompt('Set reset year for ' + row.ticker + (row.issuer?' ('+row.issuer+')':'') + ' — from the prospectus/IR page. Type "perpetual" if it\'s a fixed-rate perpetual with no reset (leave blank to skip):', '');
+        if(y === null || y.trim() === '') return; // skipped — don't select/re-render for nothing
+        if(y.trim().toLowerCase() === 'perpetual'){
+          row.structure = 'perpetual';
+          row.year = null; row.spread = null; row.floor = null;
+          ldrSave();
+        } else if(!isNaN(parseInt(y,10))){
           row.year = parseInt(y,10);
+          row.structure = 'reset';
           const s = prompt('Spread over GoC-5yr in %, e.g. 2.15 (optional):', row.spread!=null?row.spread:'');
           if(s!==null && s!=='' && !isNaN(parseFloat(s))) row.spread = parseFloat(s);
           ldrSave();
         } else {
-          return; // user skipped — don't select/re-render for nothing
+          return; // unrecognized input — don't guess
         }
       }
       ldrSelected = { target, idx };
@@ -2581,4 +2604,3 @@ ldrRender();
 </script>
 </body>
 </html>
-  
