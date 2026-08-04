@@ -2211,10 +2211,22 @@ async function ldrFetchHoldings(opts){
 
   // Load the full TSX symbol directory once per fetch (cached across the
   // session by ensureTsxSymbols, defined in the Tracker's own script block).
-  // Non-fatal if it fails — rows just fall back to their raw source code,
-  // same as before this existed.
+  // This is explicitly best-effort with a hard timeout: a real deployment
+  // issue showed this endpoint can hang indefinitely, and an unbounded
+  // `await` here would freeze the ENTIRE holdings fetch behind it — ticker
+  // resolution is a nice-to-have on top of the core fetch, not something
+  // that should ever be able to block it. If it's not back within 6s, we
+  // give up on resolution for this run and proceed with raw codes, same as
+  // before this feature existed.
   let tsxSymbols = null;
-  try{ if(typeof ensureTsxSymbols === 'function') tsxSymbols = await ensureTsxSymbols(null); }catch(e){ tsxSymbols = null; }
+  try{
+    if(typeof ensureTsxSymbols === 'function'){
+      tsxSymbols = await Promise.race([
+        ensureTsxSymbols(null),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('tsx-symbols timed out after 6s')), 6000))
+      ]);
+    }
+  }catch(e){ tsxSymbols = null; }
 
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const tables = Array.from(doc.querySelectorAll('table'));
