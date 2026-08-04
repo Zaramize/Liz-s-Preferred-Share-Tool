@@ -206,10 +206,14 @@
   .ldr-scope .ldr-rung{display:flex; align-items:center; gap:10px; border-bottom:1px solid #1a212b; padding:10px 0;}
   .ldr-scope .ldr-rung-year{width:50px; flex-shrink:0; font-family:var(--mono); font-weight:600; color:var(--text); font-size:13px;}
   .ldr-scope .ldr-rung-chips{display:flex; flex-wrap:wrap; gap:6px; flex:1;}
-  .ldr-scope .ldr-chip{border-radius:5px; padding:4px 9px; font-size:11px; cursor:default; white-space:nowrap;}
+  .ldr-scope .ldr-chip{border-radius:5px; padding:4px 9px; font-size:11px; cursor:pointer; white-space:nowrap;}
   .ldr-scope .ldr-chip.mine{background:var(--teal); color:#04211c;}
   .ldr-scope .ldr-chip.ref{background:var(--amber); color:#2b1608;}
+  .ldr-scope .ldr-chip.unconfirmed{opacity:0.55;}
+  .ldr-scope .ldr-chip:hover{opacity:1; box-shadow:0 0 0 1px #ffffff55;}
   .ldr-scope .ldr-chip b{font-weight:700;}
+  .ldr-scope .ldr-rung-unconfirmed{border-bottom:none; border-top:1px dashed #333; margin-top:6px; padding-top:14px;}
+  .ldr-scope .ldr-rung-unconfirmed .ldr-rung-year{color:var(--muted); font-size:11px; font-weight:500;}
   .ldr-scope select#ldr-diagram-fund-select{width:auto; display:inline-block;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -412,6 +416,14 @@
         <div id="ldr-universe-list"></div>
         <div class="ldr-side-title">Added to Comparison</div>
         <div id="ldr-added-list"></div>
+
+        <div class="ldr-side-title">Search by maturity</div>
+        <div style="display:flex; gap:6px; margin-bottom:8px;">
+          <input type="number" id="ldr-mat-from" placeholder="From yr" style="width:70px; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:5px 6px; font-size:12px;">
+          <input type="number" id="ldr-mat-to" placeholder="To yr" style="width:70px; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:5px 6px; font-size:12px;">
+        </div>
+        <div style="font-size:10px; color:var(--muted); margin-bottom:6px;">Searches the researched ticker library plus any reset years you've confirmed on your ladder or reference funds.</div>
+        <div id="ldr-mat-results"></div>
       </div>
 
       <div class="ldr-main">
@@ -454,8 +466,9 @@
             <div class="ldr-add-row" style="margin-bottom:12px;">
               <input type="text" id="ldr-new-fund" placeholder="Add fund (e.g. ZPR, CPD, HPR)" style="max-width:200px">
               <button onclick="ldrAddFund()">Add Fund</button>
-              <button onclick="ldrFetchHoldings()" style="background:var(--amber); color:#2b1608;">Fetch top holdings</button>
+              <button onclick="ldrFetchHoldings()" style="background:var(--amber); color:#2b1608;">Fetch / refresh top holdings</button>
               <span id="ldr-fetch-status" style="font-size:12px; color:var(--muted); align-self:center;"></span>
+              <span id="ldr-fetch-lastupdated" style="font-size:11px; color:var(--muted); align-self:center; margin-left:auto;"></span>
             </div>
             <table>
               <thead><tr><th>Ticker</th><th>Issuer</th><th>Reset Yr</th><th>Spread %</th><th>Floor %</th><th>Weight %</th><th></th><th></th></tr></thead>
@@ -529,6 +542,10 @@ function switchAppView(name){
   document.querySelectorAll('.apptab').forEach(t => t.classList.toggle('active', t.dataset.view === name));
   document.getElementById('appview-watchlist').classList.toggle('active', name === 'watchlist');
   document.getElementById('appview-ladder').classList.toggle('active', name === 'ladder');
+  // ldrAutoRefreshOnView is defined in the Ladder Comparator's own script block
+  // further down the page; by the time a user can actually click this tab, all
+  // scripts have run and it exists in global scope regardless of tag order.
+  if(name === 'ladder' && typeof ldrAutoRefreshOnView === 'function') ldrAutoRefreshOnView();
 }
 document.querySelectorAll('.apptab').forEach(t=>{
   t.onclick = ()=> switchAppView(t.dataset.view);
@@ -1968,6 +1985,38 @@ function ldrSwitchTab(name){
   if(name === 'diagram') ldrRenderDiagram();
 }
 
+document.getElementById('ldr-mat-from').addEventListener('input', ldrRenderMaturitySearch);
+document.getElementById('ldr-mat-to').addEventListener('input', ldrRenderMaturitySearch);
+
+// Searches the researched ticker library (all issuers/series we have confirmed
+// reset years for, whether or not they're currently on anyone's ladder) plus
+// every holding across "mine" and every added fund that has a confirmed year
+// set — either from LDR_TICKER_MAP matching or from a manual "set reset year"
+// click in the diagram.
+function ldrRenderMaturitySearch(){
+  const el = document.getElementById('ldr-mat-results');
+  if(!el) return;
+  const fromV = document.getElementById('ldr-mat-from').value;
+  const toV = document.getElementById('ldr-mat-to').value;
+  const from = fromV ? parseInt(fromV,10) : null;
+  const to = toV ? parseInt(toV,10) : null;
+  if(from == null && to == null){ el.innerHTML = ''; return; }
+  const inRange = (y) => y != null && (from == null || y >= from) && (to == null || y <= to);
+
+  const results = [];
+  LDR_TICKER_MAP.forEach(t => { if(inRange(t.year)) results.push({ ticker:t.ticker, issuer:t.issuer, year:t.year, spread:t.spread, source:'library' }); });
+  ldrState.mine.forEach(r => { if(inRange(r.year) && !results.some(x=>x.ticker===r.ticker)) results.push({ ticker:r.ticker, issuer:r.issuer, year:r.year, spread:r.spread, source:'your ladder' }); });
+  Object.entries(ldrState.funds).forEach(([fundName, rows]) => {
+    rows.forEach(r => { if(inRange(r.year) && !results.some(x=>x.ticker===r.ticker)) results.push({ ticker:r.ticker, issuer:r.issuer, year:r.year, spread:r.spread, source:fundName }); });
+  });
+  results.sort((a,b) => a.year - b.year);
+
+  if(!results.length){ el.innerHTML = '<div class="ldr-empty" style="font-size:11px;">No confirmed-maturity shares in that range yet.</div>'; return; }
+  el.innerHTML = results.map(r =>
+    '<div style="font-size:11px; padding:5px 0; border-bottom:1px solid #1a212b;"><span style="font-family:var(--mono); font-weight:600;">'+r.ticker+'</span> — '+r.year+(r.spread!=null?' · +'+r.spread+'%':'')+'<br><span style="color:var(--muted);">'+(r.issuer||'')+' ('+r.source+')</span></div>'
+  ).join('');
+}
+
 function ldrAddRow(target){
   const prefix = target === 'mine' ? 'ldr-m' : 'ldr-r';
   const ticker = document.getElementById(prefix+'-ticker').value.trim();
@@ -1983,10 +2032,24 @@ function ldrAddRow(target){
   ldrSave(); ldrRender();
 }
 
-async function ldrFetchHoldings(){
-  const statusEl = document.getElementById('ldr-fetch-status');
+if(!ldrState.fundMeta) ldrState.fundMeta = {}; // { [fundName]: { lastFetched: ISOString } }
+
+function ldrUpdateLastUpdatedLabel(){
+  const el = document.getElementById('ldr-fetch-lastupdated');
+  if(!el) return;
   const fund = ldrState.activeFund;
-  if(!fund){ statusEl.textContent = 'Add a fund tab first.'; return; }
+  const meta = fund && ldrState.fundMeta[fund];
+  el.textContent = meta && meta.lastFetched ? ('Last updated ' + new Date(meta.lastFetched).toLocaleString()) : '';
+}
+
+// Pulls (or refreshes) top holdings for the active fund from stockanalysis.com.
+// `opts.silent` suppresses status-text noise for background auto-refreshes.
+async function ldrFetchHoldings(opts){
+  opts = opts || {};
+  const statusEl = document.getElementById('ldr-fetch-status');
+  const setStatus = (msg) => { if(!opts.silent && statusEl) statusEl.textContent = msg; };
+  const fund = ldrState.activeFund;
+  if(!fund){ setStatus('Add a fund tab first.'); return; }
   const symbol = fund.replace('.TO','').replace('.V','');
   const targetUrl = 'https://stockanalysis.com/quote/tsx/' + encodeURIComponent(symbol) + '/holdings/';
 
@@ -1997,7 +2060,7 @@ async function ldrFetchHoldings(){
   // /api/fetch-page, which already works reliably for IR page lookups) — this
   // requires adding the functions/api/fetch-holdings.js file to the project.
   let html = null, lastErr = null;
-  statusEl.textContent = 'Fetching via server-side function…';
+  setStatus('Fetching via server-side function…');
   try{
     const res = await fetch('/api/fetch-holdings?url=' + encodeURIComponent(targetUrl));
     if(!res.ok){
@@ -2015,28 +2078,76 @@ async function ldrFetchHoldings(){
     html = data.html;
   }catch(err){ lastErr = err; }
 
-  if(!html){ statusEl.textContent = 'Server-side fetch failed for ' + symbol + ' (' + (lastErr?.message||'unknown error') + '). Make sure functions/api/fetch-holdings.js is deployed, or paste holdings manually instead.'; return; }
+  if(!html){ setStatus('Fetch failed for ' + symbol + ' (' + (lastErr?.message||'unknown error') + '). Make sure functions/api/fetch-holdings.js is deployed, or paste holdings manually instead.'); return; }
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const tables = Array.from(doc.querySelectorAll('table'));
-  if(!tables.length){ statusEl.textContent = 'Fetched OK but found no table on the page.'; return; }
+  if(!tables.length){ setStatus('Fetched OK but found no <table> on the page — its markup may have changed.'); return; }
   const table = tables.sort((a,b) => b.querySelectorAll('tr').length - a.querySelectorAll('tr').length)[0];
   const rows = Array.from(table.querySelectorAll('tbody tr').length ? table.querySelectorAll('tbody tr') : table.querySelectorAll('tr'));
-  let added = 0, matched = 0;
+
+  // Column detection is dynamic rather than fixed-index: we locate whichever
+  // cell in each row looks like a percentage ("2.37%") and treat the two
+  // cells immediately before it as Symbol and Name. This survives an extra
+  // leading "No." column (present or absent) and any reordering, which a
+  // hardcoded cells[1]/cells[2]/cells[3] read does not — a likely cause of
+  // previous silent under-parsing.
+  let added = 0, updated = 0, matched = 0, skippedNoWeight = 0, skippedTooFewCells = 0;
+  const rawRowCount = rows.length;
   rows.forEach(tr => {
     const cells = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim());
-    if(cells.length < 4) return;
-    const symbolRaw = cells[1], name = cells[2], weightRaw = cells[3];
-    const weight = parseFloat((weightRaw||'').replace('%',''));
-    if(!symbolRaw || isNaN(weight)) return;
+    if(cells.length < 3){ skippedTooFewCells++; return; }
+    const weightIdx = cells.findIndex(c => /^-?\d+(\.\d+)?%$/.test(c));
+    if(weightIdx < 2){ skippedNoWeight++; return; }
+    const symbolRaw = cells[weightIdx-2], name = cells[weightIdx-1], weightRaw = cells[weightIdx];
+    const weight = parseFloat(weightRaw.replace('%',''));
+    if(!symbolRaw || isNaN(weight)){ skippedNoWeight++; return; }
     const ref = ldrMatchTicker(name);
     const ticker = ref ? ref.ticker : symbolRaw;
-    if(ldrState.funds[fund].some(r => r.ticker === ticker)) return;
-    if(ref){ ldrState.funds[fund].push({ ticker: ref.ticker, issuer: name||'', year: ref.year, spread: ref.spread, floor: ref.floor, weight }); matched++; }
-    else { ldrState.funds[fund].push({ ticker: symbolRaw, issuer: name||'', year: null, spread: null, floor: null, weight }); }
-    added++;
+    const existing = ldrState.funds[fund].find(r => r.ticker === ticker);
+    if(existing){
+      // Live-update path: refresh weight (and fill in terms if we can now
+      // match a ticker that was previously unconfirmed), never duplicate.
+      existing.weight = weight;
+      if(ref && existing.year == null){ existing.year = ref.year; existing.spread = ref.spread; existing.floor = ref.floor; }
+      if(!existing.issuer && name) existing.issuer = name;
+      updated++;
+    } else {
+      if(ref){ ldrState.funds[fund].push({ ticker: ref.ticker, issuer: name||'', year: ref.year, spread: ref.spread, floor: ref.floor, weight }); matched++; }
+      else { ldrState.funds[fund].push({ ticker: symbolRaw, issuer: name||'', year: null, spread: null, floor: null, weight }); }
+      added++;
+    }
   });
-  ldrSave(); ldrRender();
-  statusEl.textContent = added ? ('Added ' + added + ' holding(s) — ' + matched + ' auto-matched with reset terms, ' + (added-matched) + ' need lookup.') : ('Fetched OK but parsed no rows — paste manually.');
+
+  ldrState.fundMeta[fund] = { lastFetched: new Date().toISOString() };
+  ldrSave(); ldrRender(); ldrUpdateLastUpdatedLabel();
+
+  const skipped = skippedNoWeight + skippedTooFewCells;
+  const parts = [];
+  if(added) parts.push(added + ' added (' + matched + ' auto-matched with reset terms)');
+  if(updated) parts.push(updated + ' updated');
+  if(skipped) parts.push(skipped + ' row(s) skipped — no parseable weight');
+  setStatus(parts.length
+    ? ('Table had ' + rawRowCount + ' row(s): ' + parts.join(', ') + '.')
+    : ('Fetched OK (table had ' + rawRowCount + ' row(s)) but parsed none — the page layout may have changed; paste manually instead.'));
+}
+
+// Auto-refresh: called whenever the Ladder Comparator becomes visible. Only
+// re-fetches funds that already have holdings AND haven't been fetched in
+// the last 15 minutes, so switching tabs repeatedly doesn't hammer the proxy.
+const LDR_AUTOREFRESH_MIN_MS = 15 * 60 * 1000;
+async function ldrAutoRefreshOnView(){
+  if(!ldrState.fundMeta) ldrState.fundMeta = {};
+  const originalActive = ldrState.activeFund;
+  for(const name of Object.keys(ldrState.funds)){
+    if(!(ldrState.funds[name]||[]).length) continue; // nothing fetched yet — leave it to a manual first fetch
+    const meta = ldrState.fundMeta[name];
+    const stale = !meta || !meta.lastFetched || (Date.now() - new Date(meta.lastFetched).getTime()) > LDR_AUTOREFRESH_MIN_MS;
+    if(!stale) continue;
+    ldrState.activeFund = name;
+    await ldrFetchHoldings({ silent: true });
+  }
+  ldrState.activeFund = originalActive;
+  ldrSave(); ldrRender(); ldrUpdateLastUpdatedLabel();
 }
 
 function ldrBulkAdd(target){
@@ -2087,7 +2198,7 @@ function ldrDeleteFund(name, ev){
   ldrSave(); ldrRender();
 }
 
-function ldrSwitchFund(name){ ldrState.activeFund = name; ldrSave(); ldrRender(); }
+function ldrSwitchFund(name){ ldrState.activeFund = name; ldrSave(); ldrRender(); ldrUpdateLastUpdatedLabel(); }
 
 function ldrRenderTable(bodyId, rows, target){
   const body = document.getElementById(bodyId);
@@ -2230,11 +2341,15 @@ function ldrRenderSwapPanel(){
   const candidates = LDR_TICKER_MAP.filter(t => {
     if(t.ticker === row.ticker) return false;
     if(currentTickers.has(t.ticker)) return false;
-    if(!row.year || !t.year) return true;
-    return Math.abs(t.year - row.year) <= 1;
+    if(!row.year) return false; // unconfirmed maturity — nothing to match against yet
+    return t.year === row.year;
   });
+  if(!row.year){
+    swapList.innerHTML = '<div class="ldr-empty">This holding\'s reset year isn\'t confirmed yet — set it in the diagram view (click its chip) to see same-year swap candidates.</div>';
+    return;
+  }
   if(!candidates.length){
-    swapList.innerHTML = '<div class="ldr-empty">No alternatives in the researched ticker library yet for this reset-year range — ask me to look up more issuers near ' + (row.year||'this year') + '.</div>';
+    swapList.innerHTML = '<div class="ldr-empty">No alternatives in the researched ticker library yet that reset exactly in ' + row.year + ' — ask me to look up more issuers for that year.</div>';
     return;
   }
   candidates.forEach(c => {
@@ -2270,29 +2385,79 @@ function ldrRenderDiagram(){
   const refRows = ldrState.funds[fundName] || [];
   const wrap = document.getElementById('ldr-ladder-wrap');
   wrap.innerHTML = '';
-  const years = Array.from(new Set([...ldrState.mine, ...refRows].map(r=>r.year))).filter(y=>y).sort((a,b)=>a-b);
-  if(!years.length){ wrap.innerHTML = '<div class="ldr-empty">Add holdings with reset years to see the diagram.</div>'; return; }
+
+  // IMPORTANT: every holding gets a slot here, whether or not we've confirmed
+  // its reset year. Previous versions filtered to `r.year` truthy before
+  // building rungs, which silently dropped any holding not already matched in
+  // LDR_TICKER_MAP (the small researched-issuer list) — since that list only
+  // covers a handful of series, that meant only 2-4 of a fund's ~25 holdings
+  // ever showed up in this diagram, even though all 25 were correctly stored.
+  // Now unmatched holdings get their own "Unconfirmed" rung instead of
+  // vanishing, and clicking one lets you set its reset year on the spot.
+  const mineWithIdx = ldrState.mine.map((r,i)=>({r,i,target:'mine'}));
+  const refWithIdx = refRows.map((r,i)=>({r,i,target:'ref'}));
+  const all = [...mineWithIdx, ...refWithIdx];
+  if(!all.length){ wrap.innerHTML = '<div class="ldr-empty">Add or fetch holdings to see the diagram.</div>'; return; }
+
+  const years = Array.from(new Set(all.filter(x=>x.r.year).map(x=>x.r.year))).sort((a,b)=>a-b);
+  const unconfirmed = all.filter(x=>!x.r.year);
 
   function chipTitle(r){
     const m = LDR_TICKER_MAP.find(t => t.ticker === r.ticker);
     if(m) return m.summary + ldrConfidenceLabel(m);
-    return r.ticker + ' — spread ' + (r.spread!=null?r.spread+'%':'unknown') + ', floor ' + (r.floor!=null?r.floor+'%':'none') + '. No researched summary yet.';
+    if(r.year) return r.ticker + ' — spread ' + (r.spread!=null?r.spread+'%':'unknown') + ', floor ' + (r.floor!=null?r.floor+'%':'none') + '. No researched summary yet — click to edit.';
+    return r.ticker + (r.issuer?' ('+r.issuer+')':'') + ' — reset year not yet confirmed. Weight ' + (r.weight!=null?r.weight.toFixed(1)+'%':'unknown') + '. Click to set it.';
   }
   function chipEstimated(r){
     const m = LDR_TICKER_MAP.find(t => t.ticker === r.ticker);
     return m && m.confidence === 'estimated';
   }
+  function chipHtml(x){
+    const r = x.r;
+    const cls = 'ldr-chip ' + (x.target==='mine'?'mine':'ref') + (!r.year ? ' unconfirmed' : '');
+    const dashed = chipEstimated(r) ? 'border:1px dashed #ffffff88;' : '';
+    return '<span class="'+cls+'" data-target="'+x.target+'" data-idx="'+x.i+'" style="'+dashed+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight!=null?r.weight.toFixed(1)+'%':'')+(chipEstimated(r)?' ~':'')+(!r.year?' ?':'')+'</span>';
+  }
 
   years.forEach(y => {
-    const mineHere = ldrState.mine.filter(r => r.year === y);
-    const refHere = refRows.filter(r => r.year === y);
+    const mineHere = mineWithIdx.filter(x => x.r.year === y);
+    const refHere = refWithIdx.filter(x => x.r.year === y);
     const rung = document.createElement('div');
     rung.className = 'ldr-rung';
-    let chips = '';
-    mineHere.forEach(r => { chips += '<span class="ldr-chip mine" style="'+(chipEstimated(r)?'border:1px dashed #ffffff88;':'')+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight?r.weight.toFixed(1)+'%':'')+(chipEstimated(r)?' ~':'')+'</span>'; });
-    refHere.forEach(r => { chips += '<span class="ldr-chip ref" style="'+(chipEstimated(r)?'border:1px dashed #ffffff88;':'')+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight?r.weight.toFixed(1)+'%':'')+(chipEstimated(r)?' ~':'')+'</span>'; });
+    const chips = mineHere.map(chipHtml).join('') + refHere.map(chipHtml).join('');
     rung.innerHTML = '<div class="ldr-rung-year">'+y+'</div><div class="ldr-rung-chips">'+(chips || '<span class="ldr-empty" style="padding:0;">empty rung</span>')+'</div>';
     wrap.appendChild(rung);
+  });
+
+  if(unconfirmed.length){
+    const rung = document.createElement('div');
+    rung.className = 'ldr-rung ldr-rung-unconfirmed';
+    rung.innerHTML = '<div class="ldr-rung-year">Unconfirmed ('+unconfirmed.length+')</div><div class="ldr-rung-chips">'+unconfirmed.map(chipHtml).join('')+'</div>';
+    wrap.appendChild(rung);
+  }
+
+  // Click a chip: if it has no confirmed year yet, prompt for one (moves it
+  // into the right rung on next render); either way, select it so the swap
+  // panel below shows same-reset-year alternatives.
+  wrap.querySelectorAll('.ldr-chip').forEach(chip => {
+    chip.onclick = () => {
+      const target = chip.dataset.target, idx = parseInt(chip.dataset.idx, 10);
+      const row = (target==='mine' ? ldrState.mine : ldrState.funds[fundName])[idx];
+      if(!row) return;
+      if(!row.year){
+        const y = prompt('Set reset year for ' + row.ticker + (row.issuer?' ('+row.issuer+')':'') + ' — from the prospectus/IR page (leave blank to skip):', '');
+        if(y && !isNaN(parseInt(y,10))){
+          row.year = parseInt(y,10);
+          const s = prompt('Spread over GoC-5yr in %, e.g. 2.15 (optional):', row.spread!=null?row.spread:'');
+          if(s!==null && s!=='' && !isNaN(parseFloat(s))) row.spread = parseFloat(s);
+          ldrSave();
+        } else {
+          return; // user skipped — don't select/re-render for nothing
+        }
+      }
+      ldrSelected = { target, idx };
+      ldrRender();
+    };
   });
 }
 
@@ -2305,7 +2470,9 @@ function ldrRender(){
   ldrRenderConcentration();
   ldrRenderChart();
   ldrRenderGaps();
+  ldrUpdateLastUpdatedLabel();
   if(document.getElementById('ldr-view-diagram').classList.contains('active')) ldrRenderDiagram();
+  ldrRenderMaturitySearch();
 }
 
 ldrRender();
