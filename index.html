@@ -424,6 +424,15 @@
         </div>
         <div style="font-size:10px; color:var(--muted); margin-bottom:6px;">Searches the researched ticker library plus any reset years you've confirmed on your ladder or reference funds.</div>
         <div id="ldr-mat-results"></div>
+
+        <div class="ldr-side-title">Pending promotion <span id="ldr-promote-count" style="color:var(--muted); font-weight:400;"></span></div>
+        <div style="font-size:10px; color:var(--muted); margin-bottom:6px;">Aggregator/estimated entries in the researched library. Promoting one doesn't change anything live — it generates code to paste into <code>LDR_TICKER_MAP</code>, replacing that entry, once you've actually checked the issuer's own prospectus.</div>
+        <div id="ldr-promote-list"></div>
+        <div id="ldr-promote-output-wrap" style="display:none; margin-top:8px;">
+          <textarea id="ldr-promote-output" readonly rows="6" style="width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:6px; font-family:var(--mono); font-size:10px;"></textarea>
+          <button id="ldr-promote-copy" style="margin-top:4px; background:var(--teal); color:#04211c; border:none; border-radius:4px; padding:5px 10px; font-size:11px; font-weight:600; cursor:pointer;">Copy snippet</button>
+          <div style="font-size:10px; color:var(--muted); margin-top:4px;">Paste this in place of the old entry in <code>LDR_TICKER_MAP</code>, then hand the file back to Claude/commit as usual.</div>
+        </div>
       </div>
 
       <div class="ldr-main">
@@ -1942,6 +1951,19 @@ const LDR_FUND_UNIVERSE = [
   { symbol:'RPF', style:'Active manager' }
 ];
 
+// LDR_TICKER_MAP — sourcing rule (updated):
+// `confidence` has three allowed values, and every entry MUST carry one:
+//   'confirmed'  — traced to the issuer's own prospectus or press release.
+//                  No sourceName needed; summary should say which document.
+//   'aggregator' — pulled from a third-party site that compiles this data
+//                  (e.g. canadianpreferredshares.ca) rather than the issuer
+//                  directly. REQUIRES a `sourceName` field naming that site.
+//                  Faster to populate, but not verified against the actual
+//                  prospectus — treat as "probably right, not yet confirmed."
+//   'estimated'  — a guess/placeholder with no real source yet.
+// This exists so the app can visibly flag anything that isn't confirmed
+// against a primary source, everywhere it's shown (diagram chips, swap
+// candidates, maturity search) — never silently blend tiers together.
 const LDR_TICKER_MAP = [
   { issuer:'bce', series:'ak', ticker:'BCE.PR.K', year:2026, spread:1.88, floor:null, confidence:'confirmed',
     summary:'BCE Cumulative Redeemable First Pfd Series AK. Resets every 5 yrs to GOC-5yr + 1.88%. No stated floor. Issuer-redeemable at $25 on reset dates. Source: prospectus/press release.' },
@@ -1955,11 +1977,18 @@ const LDR_TICKER_MAP = [
     summary:'Brookfield Corp Cumulative Class A Pref Series 42 (BN.PF.G). GOC-5yr + 2.84%. Resets every 5 yrs, next Jul 1 2030. Holder-interconvertible with floating Series 43. Source: bn.brookfield.com official IR page.' },
   { issuer:'intact', series:'3', ticker:'IFC.PR.C', year:2026, spread:2.66, floor:null, confidence:'confirmed',
     summary:'Intact Financial Non-Cumulative Rate Reset Class A Series 3 (IFC.PR.C). GOC-5yr + 2.66%. Resets every 5 yrs, next Sep 30 2026. Non-cumulative. Source: Intact official shareholder-info document.' }
+
+  // Example of the new aggregator tier (not added yet — for reference only):
+  // { issuer:'cenovus', series:'a', ticker:'CVE.PR.A', year:2027, spread:3.90, floor:null,
+  //   confidence:'aggregator', sourceName:'canadianpreferredshares.ca',
+  //   summary:'Cenovus Cumulative Redeemable Pfd Series A. GOC-5yr + 3.90% per canadianpreferredshares.ca (third-party aggregator, not yet confirmed against Cenovus\'s own prospectus).' },
 ];
 
 function ldrConfidenceLabel(entry){
   if(!entry) return '';
-  return entry.confidence === 'estimated' ? ' [ESTIMATED — verify before use]' : '';
+  if(entry.confidence === 'aggregator') return ' [THIRD-PARTY: ' + (entry.sourceName||'aggregator') + ' — not yet confirmed against issuer prospectus]';
+  if(entry.confidence === 'estimated') return ' [ESTIMATED — verify before use]';
+  return '';
 }
 
 function ldrMatchTicker(name){
@@ -2004,18 +2033,81 @@ function ldrRenderMaturitySearch(){
   const inRange = (y) => y != null && (from == null || y >= from) && (to == null || y <= to);
 
   const results = [];
-  LDR_TICKER_MAP.forEach(t => { if(inRange(t.year)) results.push({ ticker:t.ticker, issuer:t.issuer, year:t.year, spread:t.spread, source:'library' }); });
-  ldrState.mine.forEach(r => { if(inRange(r.year) && !results.some(x=>x.ticker===r.ticker)) results.push({ ticker:r.ticker, issuer:r.issuer, year:r.year, spread:r.spread, source:'your ladder' }); });
+  LDR_TICKER_MAP.forEach(t => { if(inRange(t.year)) results.push({ ticker:t.ticker, issuer:t.issuer, year:t.year, spread:t.spread, source:'library', tier:t.confidence, sourceName:t.sourceName }); });
+  ldrState.mine.forEach(r => { if(inRange(r.year) && !results.some(x=>x.ticker===r.ticker)){ const m = LDR_TICKER_MAP.find(t=>t.ticker===r.ticker); results.push({ ticker:r.ticker, issuer:r.issuer, year:r.year, spread:r.spread, source:'your ladder', tier:m?m.confidence:null, sourceName:m?m.sourceName:null }); } });
   Object.entries(ldrState.funds).forEach(([fundName, rows]) => {
-    rows.forEach(r => { if(inRange(r.year) && !results.some(x=>x.ticker===r.ticker)) results.push({ ticker:r.ticker, issuer:r.issuer, year:r.year, spread:r.spread, source:fundName }); });
+    rows.forEach(r => { if(inRange(r.year) && !results.some(x=>x.ticker===r.ticker)){ const m = LDR_TICKER_MAP.find(t=>t.ticker===r.ticker); results.push({ ticker:r.ticker, issuer:r.issuer, year:r.year, spread:r.spread, source:fundName, tier:m?m.confidence:null, sourceName:m?m.sourceName:null }); } });
   });
   results.sort((a,b) => a.year - b.year);
 
   if(!results.length){ el.innerHTML = '<div class="ldr-empty" style="font-size:11px;">No confirmed-maturity shares in that range yet.</div>'; return; }
-  el.innerHTML = results.map(r =>
-    '<div style="font-size:11px; padding:5px 0; border-bottom:1px solid #1a212b;"><span style="font-family:var(--mono); font-weight:600;">'+r.ticker+'</span> — '+r.year+(r.spread!=null?' · +'+r.spread+'%':'')+'<br><span style="color:var(--muted);">'+(r.issuer||'')+' ('+r.source+')</span></div>'
-  ).join('');
+  el.innerHTML = results.map(r => {
+    const tierTag = r.tier === 'aggregator' ? ' <span style="color:#e8a33d;">[3rd-party: '+(r.sourceName||'aggregator')+']</span>'
+                   : r.tier === 'estimated' ? ' <span style="color:#ffffff88;">[estimated]</span>' : '';
+    return '<div style="font-size:11px; padding:5px 0; border-bottom:1px solid #1a212b;"><span style="font-family:var(--mono); font-weight:600;">'+r.ticker+'</span> — '+r.year+(r.spread!=null?' · +'+r.spread+'%':'')+tierTag+'<br><span style="color:var(--muted);">'+(r.issuer||'')+' ('+r.source+')</span></div>';
+  }).join('');
 }
+
+// ---------- Promotion (aggregator/estimated -> confirmed) ----------
+// LDR_TICKER_MAP has no runtime persistence, so "promoting" an entry can't be
+// a database write — it has to become a code change. This generates that
+// change as a paste-ready snippet, gated on the person actually typing in
+// what they checked it against, rather than a one-click toggle that could
+// silently mark something "confirmed" with nothing behind it.
+function ldrRenderPromoteList(){
+  const listEl = document.getElementById('ldr-promote-list');
+  const countEl = document.getElementById('ldr-promote-count');
+  if(!listEl) return;
+  const pending = LDR_TICKER_MAP.filter(t => t.confidence !== 'confirmed');
+  countEl.textContent = pending.length ? '(' + pending.length + ')' : '';
+  if(!pending.length){ listEl.innerHTML = '<div class="ldr-empty" style="font-size:11px;">Nothing pending — every library entry is primary-source confirmed.</div>'; return; }
+  listEl.innerHTML = '';
+  pending.forEach(entry => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:11px; padding:5px 0; border-bottom:1px solid #1a212b;';
+    const tierTag = entry.confidence === 'aggregator'
+      ? '<span style="color:#e8a33d;">3rd-party'+(entry.sourceName?' ('+entry.sourceName+')':'')+'</span>'
+      : '<span style="color:#ffffff88;">estimated</span>';
+    row.innerHTML = '<div><span style="font-family:var(--mono); font-weight:600;">'+entry.ticker+'</span><br>'+tierTag+'</div>';
+    const btn = document.createElement('button');
+    btn.textContent = 'Promote →';
+    btn.style.cssText = 'background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:4px 8px; font-size:10px; cursor:pointer;';
+    btn.onclick = () => ldrPromoteEntry(entry.ticker);
+    row.appendChild(btn);
+    listEl.appendChild(row);
+  });
+}
+
+function ldrPromoteEntry(ticker){
+  const entry = LDR_TICKER_MAP.find(t => t.ticker === ticker);
+  if(!entry) return;
+  const citation = prompt(
+    'What did you check ' + ticker + ' against? Be specific — this becomes the permanent source note (e.g. "TC Energy press release, Feb 2025, tc-energy.com/investors" or "prospectus supplement filed on SEDAR+, dated ..."):',
+    ''
+  );
+  if(!citation) return; // no citation typed — don't generate anything that looks confirmed without one
+  const strippedSummary = (entry.summary || '').replace(/\s*Source:.*$/i, '').trim();
+  const newEntry = {
+    issuer: entry.issuer, series: entry.series, ticker: entry.ticker,
+    year: entry.year, spread: entry.spread, floor: entry.floor,
+    confidence: 'confirmed',
+    summary: strippedSummary + (strippedSummary.endsWith('.') ? '' : '.') + ' Source: ' + citation + '.'
+  };
+  const snippet =
+`  { issuer:'${newEntry.issuer}', series:'${newEntry.series}', ticker:'${newEntry.ticker}', year:${newEntry.year}, spread:${newEntry.spread}, floor:${newEntry.floor===null?'null':newEntry.floor}, confidence:'confirmed',
+    summary:'${newEntry.summary.replace(/'/g, "\\'")}' },`;
+  const outWrap = document.getElementById('ldr-promote-output-wrap');
+  const out = document.getElementById('ldr-promote-output');
+  out.value = snippet;
+  outWrap.style.display = 'block';
+  out.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+document.getElementById('ldr-promote-copy').addEventListener('click', () => {
+  const out = document.getElementById('ldr-promote-output');
+  out.select();
+  navigator.clipboard && navigator.clipboard.writeText(out.value).catch(()=>{ document.execCommand('copy'); });
+});
 
 function ldrAddRow(target){
   const prefix = target === 'mine' ? 'ldr-m' : 'ldr-r';
@@ -2355,13 +2447,16 @@ function ldrRenderSwapPanel(){
   candidates.forEach(c => {
     const div = document.createElement('div');
     div.className = 'ldr-swap-item';
+    div.title = ldrConfidenceLabel(c) ? (c.summary||'') + ldrConfidenceLabel(c) : '';
     div.onclick = () => {
       const target = confirm('Add ' + c.ticker + ' to your ladder? (Cancel adds it to ' + ldrState.activeFund + ' instead)') ? 'mine' : 'ref';
       const entry = { ticker:c.ticker, issuer:c.issuer, year:c.year, spread:c.spread, floor:c.floor, weight:0 };
       if(target==='mine') ldrState.mine.push(entry); else ldrState.funds[ldrState.activeFund].push(entry);
       ldrSave(); ldrRender();
     };
-    div.innerHTML = '<div><span class="name" style="font-family:var(--mono)">'+c.ticker+'</span> <span class="detail">— resets '+c.year+', +'+(c.spread!=null?c.spread+'%':'?')+'</span></div><div class="detail">click to add</div>';
+    const tierTag = c.confidence === 'aggregator' ? ' <span style="color:#e8a33d;">[3rd-party: '+(c.sourceName||'aggregator')+']</span>'
+                   : c.confidence === 'estimated' ? ' <span style="color:#ffffff88;">[estimated]</span>' : '';
+    div.innerHTML = '<div><span class="name" style="font-family:var(--mono)">'+c.ticker+'</span> <span class="detail">— resets '+c.year+', +'+(c.spread!=null?c.spread+'%':'?')+'</span>'+tierTag+'</div><div class="detail">click to add</div>';
     swapList.appendChild(div);
   });
 }
@@ -2408,15 +2503,21 @@ function ldrRenderDiagram(){
     if(r.year) return r.ticker + ' — spread ' + (r.spread!=null?r.spread+'%':'unknown') + ', floor ' + (r.floor!=null?r.floor+'%':'none') + '. No researched summary yet — click to edit.';
     return r.ticker + (r.issuer?' ('+r.issuer+')':'') + ' — reset year not yet confirmed. Weight ' + (r.weight!=null?r.weight.toFixed(1)+'%':'unknown') + '. Click to set it.';
   }
-  function chipEstimated(r){
+  function chipSourceTier(r){
     const m = LDR_TICKER_MAP.find(t => t.ticker === r.ticker);
-    return m && m.confidence === 'estimated';
+    return m ? m.confidence : null; // 'confirmed' | 'aggregator' | 'estimated' | null (no library entry at all)
   }
   function chipHtml(x){
     const r = x.r;
+    const tier = chipSourceTier(r);
     const cls = 'ldr-chip ' + (x.target==='mine'?'mine':'ref') + (!r.year ? ' unconfirmed' : '');
-    const dashed = chipEstimated(r) ? 'border:1px dashed #ffffff88;' : '';
-    return '<span class="'+cls+'" data-target="'+x.target+'" data-idx="'+x.i+'" style="'+dashed+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight!=null?r.weight.toFixed(1)+'%':'')+(chipEstimated(r)?' ~':'')+(!r.year?' ?':'')+'</span>';
+    // Visible, not just on-hover: aggregator-sourced entries get a dashed
+    // amber border + "3rd-party" tag; estimated ones keep the existing
+    // dashed white + "~"; primary-confirmed entries get no extra marking.
+    let borderStyle = '', badge = '';
+    if(tier === 'aggregator'){ borderStyle = 'border:1px dashed #e8a33d;'; badge = ' 3rd-party'; }
+    else if(tier === 'estimated'){ borderStyle = 'border:1px dashed #ffffff88;'; badge = ' ~'; }
+    return '<span class="'+cls+'" data-target="'+x.target+'" data-idx="'+x.i+'" style="'+borderStyle+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight!=null?r.weight.toFixed(1)+'%':'')+badge+(!r.year?' ?':'')+'</span>';
   }
 
   years.forEach(y => {
@@ -2473,9 +2574,11 @@ function ldrRender(){
   ldrUpdateLastUpdatedLabel();
   if(document.getElementById('ldr-view-diagram').classList.contains('active')) ldrRenderDiagram();
   ldrRenderMaturitySearch();
+  ldrRenderPromoteList();
 }
 
 ldrRender();
 </script>
 </body>
 </html>
+  
