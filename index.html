@@ -2001,6 +2001,41 @@ function ldrMatchTicker(name){
   return null;
 }
 
+// Pulls the series identifier out of a company-name string, e.g.
+// "BCE Inc. 1st Pfd Ser Ak" -> "AK", "Enbridge Inc Pref Series 11" -> "11".
+// Takes the LAST "Series X" occurrence in case the name mentions it twice.
+function ldrExtractSeriesToken(name){
+  const upper = (name||'').toUpperCase().replace(/[.,]/g,'');
+  const matches = [...upper.matchAll(/\b(?:SERIES|SER|SR)\s+([A-Z0-9]+)\b/g)];
+  return matches.length ? matches[matches.length-1][1] : null;
+}
+
+// Resolves a holding's REAL TSX ticker from the full symbol directory
+// (functions/api/tsx-symbols.js — the same data source the Tracker's issuer
+// search already uses) when it isn't in LDR_TICKER_MAP. Without this,
+// unmatched holdings keep whatever internal code stockanalysis.com's data
+// provider (Finnhub) uses — e.g. "BCECN.V3.306 PERP AK" — instead of the
+// actual tradeable symbol, e.g. "BCE.PR.AM". Depends on KNOWN_ISSUERS and
+// isPreferredTicker, both defined in the Tracker's own script block earlier
+// on the page — safe to reference here since this only ever runs after a
+// user click, by which point every script on the page has already executed.
+function ldrResolveTickerViaDirectory(symbols, name){
+  if(!symbols || !name) return null;
+  const lower = name.toLowerCase();
+  const issuerMatch = (typeof KNOWN_ISSUERS !== 'undefined' ? KNOWN_ISSUERS : []).find(iss =>
+    (iss.aliases||[]).some(a => lower.includes(a))
+  );
+  if(!issuerMatch) return null;
+  const seriesToken = ldrExtractSeriesToken(name);
+  if(!seriesToken) return null;
+  const candidates = symbols.filter(s =>
+    (typeof isPreferredTicker === 'function' ? isPreferredTicker(s.ticker) : /\.(PR|PF)\.[A-Z0-9]+$/.test(s.ticker)) &&
+    (issuerMatch.tickerPrefixes||[]).includes(s.ticker.split('.')[0])
+  );
+  const match = candidates.find(s => ldrExtractSeriesToken(s.name) === seriesToken);
+  return match ? match.ticker : null;
+}
+
 function ldrNewsUrl(ticker, issuer){
   const q = encodeURIComponent((issuer||'') + ' ' + ticker + ' preferred share');
   return 'https://news.google.com/search?q=' + q;
@@ -2173,6 +2208,14 @@ async function ldrFetchHoldings(opts){
   }catch(err){ lastErr = err; }
 
   if(!html){ setStatus('Fetch failed for ' + symbol + ' (' + (lastErr?.message||'unknown error') + '). Make sure functions/api/fetch-holdings.js is deployed, or paste holdings manually instead.'); return; }
+
+  // Load the full TSX symbol directory once per fetch (cached across the
+  // session by ensureTsxSymbols, defined in the Tracker's own script block).
+  // Non-fatal if it fails — rows just fall back to their raw source code,
+  // same as before this existed.
+  let tsxSymbols = null;
+  try{ if(typeof ensureTsxSymbols === 'function') tsxSymbols = await ensureTsxSymbols(null); }catch(e){ tsxSymbols = null; }
+
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const tables = Array.from(doc.querySelectorAll('table'));
   if(!tables.length){ setStatus('Fetched OK but found no <table> on the page — its markup may have changed.'); return; }
@@ -2185,7 +2228,7 @@ async function ldrFetchHoldings(opts){
   // leading "No." column (present or absent) and any reordering, which a
   // hardcoded cells[1]/cells[2]/cells[3] read does not — a likely cause of
   // previous silent under-parsing.
-  let added = 0, updated = 0, matched = 0, skippedNoWeight = 0, skippedTooFewCells = 0;
+  let added = 0, updated = 0, matched = 0, resolved = 0, skippedNoWeight = 0, skippedTooFewCells = 0;
   const rawRowCount = rows.length;
   rows.forEach(tr => {
     const cells = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim());
@@ -2196,8 +2239,23 @@ async function ldrFetchHoldings(opts){
     const weight = parseFloat(weightRaw.replace('%',''));
     if(!symbolRaw || isNaN(weight)){ skippedNoWeight++; return; }
     const ref = ldrMatchTicker(name);
-    const ticker = ref ? ref.ticker : symbolRaw;
-    const existing = ldrState.funds[fund].find(r => r.ticker === ticker);
+    // Not in LDR_TICKER_MAP (no reset year/spread available), but we can
+    // still resolve its REAL ticker from the TSX directory instead of
+    // leaving the source's internal code (e.g. "BCECN.V3.306 PERP AK")
+    // sitting there permanently. This doesn't give us reset terms — that
+    // still requires LDR_TICKER_MAP or a manual "set reset year" — but it
+    // makes the chip searchable and identifiable instead of noise.
+    let resolvedTicker = null;
+    if(!ref && tsxSymbols) resolvedTicker = ldrResolveTickerViaDirectory(tsxSymbols, name);
+    const ticker = ref ? ref.ticker : (resolvedTicker || symbolRaw);
+    let existing = ldrState.funds[fund].find(r => r.ticker === ticker);
+    // Migration case: a prior fetch (before directory resolution existed)
+    // may have stored this same holding under its raw source code. Rename
+    // that row in place rather than creating a duplicate.
+    if(!existing && resolvedTicker && resolvedTicker !== symbolRaw){
+      existing = ldrState.funds[fund].find(r => r.ticker === symbolRaw);
+      if(existing) existing.ticker = ticker;
+    }
     if(existing){
       // Live-update path: refresh weight (and fill in terms if we can now
       // match a ticker that was previously unconfirmed), never duplicate.
@@ -2207,7 +2265,7 @@ async function ldrFetchHoldings(opts){
       updated++;
     } else {
       if(ref){ ldrState.funds[fund].push({ ticker: ref.ticker, issuer: name||'', year: ref.year, spread: ref.spread, floor: ref.floor, weight }); matched++; }
-      else { ldrState.funds[fund].push({ ticker: symbolRaw, issuer: name||'', year: null, spread: null, floor: null, weight }); }
+      else { ldrState.funds[fund].push({ ticker: ticker, issuer: name||'', year: null, spread: null, floor: null, weight }); if(resolvedTicker) resolved++; }
       added++;
     }
   });
@@ -2217,7 +2275,7 @@ async function ldrFetchHoldings(opts){
 
   const skipped = skippedNoWeight + skippedTooFewCells;
   const parts = [];
-  if(added) parts.push(added + ' added (' + matched + ' auto-matched with reset terms)');
+  if(added) parts.push(added + ' added (' + matched + ' auto-matched with reset terms' + (resolved ? ', ' + resolved + ' more resolved to a real ticker' : '') + ')');
   if(updated) parts.push(updated + ' updated');
   if(skipped) parts.push(skipped + ' row(s) skipped — no parseable weight');
   setStatus(parts.length
