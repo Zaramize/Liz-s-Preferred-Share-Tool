@@ -8,10 +8,20 @@
 const SOURCE_URL = 'https://www.tsx.com/files/trading/moc-eligible-stocks.txt';
 
 export async function onRequestGet(context) {
+  // Root-cause fix: there was no timeout on the upstream fetch below, so if
+  // tsx.com is slow or unresponsive, this whole function could hang rather
+  // than erroring — which then hangs any client code awaiting it (this bit
+  // the Ladder Comparator's ticker-resolution feature directly). An
+  // AbortController with a hard ceiling means the worst case is now a fast,
+  // clear timeout error instead of an indefinite hang.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
   try {
     const upstream = await fetch(SOURCE_URL, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PreferredShareTracker/1.0)' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PreferredShareTracker/1.0)' },
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
     if (!upstream.ok) {
       return new Response(JSON.stringify({ error: 'upstream returned ' + upstream.status }), {
         status: upstream.status,
@@ -51,7 +61,9 @@ export async function onRequestGet(context) {
       }
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: 'Failed to fetch TSX symbol directory', detail: String(err) }), {
+    clearTimeout(timeoutId);
+    const timedOut = err && err.name === 'AbortError';
+    return new Response(JSON.stringify({ error: timedOut ? 'Timed out waiting for tsx.com after 8s' : 'Failed to fetch TSX symbol directory', detail: String(err) }), {
       status: 502,
       headers: { 'Content-Type': 'application/json' }
     });
