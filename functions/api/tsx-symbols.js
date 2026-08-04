@@ -15,7 +15,13 @@ export async function onRequestGet(context) {
   // AbortController with a hard ceiling means the worst case is now a fast,
   // clear timeout error instead of an indefinite hang.
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  // 8s was too aggressive for a genuinely cold fetch of a large,
+  // uncached-by-us upstream file — a direct test showed this can take 30s+
+  // with no warm connection. Raised to 20s so a real (if slow) response
+  // isn't killed before it can arrive; the client side additionally warms
+  // this proactively in the background before it's actually needed, so the
+  // slow path should be rare in practice, not the common case.
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
   try {
     const upstream = await fetch(SOURCE_URL, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PreferredShareTracker/1.0)' },
@@ -63,7 +69,7 @@ export async function onRequestGet(context) {
   } catch (err) {
     clearTimeout(timeoutId);
     const timedOut = err && err.name === 'AbortError';
-    return new Response(JSON.stringify({ error: timedOut ? 'Timed out waiting for tsx.com after 8s' : 'Failed to fetch TSX symbol directory', detail: String(err) }), {
+    return new Response(JSON.stringify({ error: timedOut ? 'Timed out waiting for tsx.com after 20s' : 'Failed to fetch TSX symbol directory', detail: String(err) }), {
       status: 502,
       headers: { 'Content-Type': 'application/json' }
     });
