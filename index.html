@@ -2285,8 +2285,20 @@ async function ldrFetchHoldingsFromCsv(fund, csvUrl, opts){
   }
 
   ldrState.fundMeta[fund] = { lastFetched: new Date().toISOString() };
-  ldrSave(); ldrRender(); ldrUpdateLastUpdatedLabel();
-  setStatus('Official issuer CSV: ' + added + ' added, ' + updated + ' updated' + (skipped ? ', ' + skipped + ' row(s) skipped' : '') + ' — real tickers straight from the issuer, no name-matching guesswork for this fund.');
+  ldrSave();
+  // The data above is already saved at this point regardless of what
+  // happens next — render errors shouldn't be able to make it look like
+  // the fetch itself failed or hung (that's exactly what happened before
+  // this try/catch existed: a downstream render bug threw, silently
+  // rejected this whole async function since nothing above ever caught it,
+  // and the status text just froze on "Fetching…" forever with no visible
+  // error and no indication the import had actually already succeeded).
+  try{
+    ldrRender(); ldrUpdateLastUpdatedLabel();
+    setStatus('Official issuer CSV: ' + added + ' added, ' + updated + ' updated' + (skipped ? ', ' + skipped + ' row(s) skipped' : '') + ' — real tickers straight from the issuer, no name-matching guesswork for this fund.');
+  }catch(renderErr){
+    setStatus('Data saved (' + added + ' added, ' + updated + ' updated) but a display error occurred after: ' + renderErr.message + ' — try switching tabs or reloading to refresh the view.');
+  }
 }
 
 async function ldrFetchHoldings(opts){
@@ -2409,7 +2421,7 @@ async function ldrFetchHoldings(opts){
   });
 
   ldrState.fundMeta[fund] = { lastFetched: new Date().toISOString() };
-  ldrSave(); ldrRender(); ldrUpdateLastUpdatedLabel();
+  ldrSave();
 
   const skipped = skippedNoWeight + skippedTooFewCells;
   const parts = [];
@@ -2417,9 +2429,15 @@ async function ldrFetchHoldings(opts){
   if(updated) parts.push(updated + ' updated');
   if(skipped) parts.push(skipped + ' row(s) skipped — no parseable weight');
   if(tsxSkippedReason) parts.push(tsxSkippedReason);
-  setStatus(parts.length
+  const summary = parts.length
     ? ('Table had ' + rawRowCount + ' row(s): ' + parts.join(', ') + '.')
-    : ('Fetched OK (table had ' + rawRowCount + ' row(s)) but parsed none — the page layout may have changed; paste manually instead.'));
+    : ('Fetched OK (table had ' + rawRowCount + ' row(s)) but parsed none — the page layout may have changed; paste manually instead.');
+  try{
+    ldrRender(); ldrUpdateLastUpdatedLabel();
+    setStatus(summary);
+  }catch(renderErr){
+    setStatus('Data saved (' + summary + ') but a display error occurred after: ' + renderErr.message + ' — try switching tabs or reloading to refresh the view.');
+  }
 }
 
 // Auto-refresh: called whenever the Ladder Comparator becomes visible. Only
@@ -2559,7 +2577,16 @@ function ldrRenderSidebar(){
 
 function ldrBucketByYear(rows){
   const map = {};
-  (rows||[]).forEach(r => { map[r.year] = (map[r.year]||0) + (r.weight||0); });
+  // Skip unconfirmed (year: null) holdings entirely — they don't belong on
+  // a year-bucketed chart/gap-analysis at all. Previously this bucketed
+  // them under the object key "null" (JS coerces r.year to a string key),
+  // which downstream code then ran through Number("null") -> NaN, and NaN
+  // silently survived into render loops until it hit a .toFixed() call on
+  // a key that was never actually set. This only ever crashed with enough
+  // unconfirmed holdings in play to make the NaN bucket "win" a sort/filter
+  // — which never happened with ~25-row funds, only once CPD's real ~150-row
+  // CSV import was in the mix.
+  (rows||[]).forEach(r => { if(r.year != null) map[r.year] = (map[r.year]||0) + (r.weight||0); });
   return map;
 }
 
@@ -2598,7 +2625,7 @@ function ldrRenderGaps(){
     const names = holdersInYear.slice(0,3).map(r => r.ticker).join(', ');
     const div = document.createElement('div');
     div.className = 'ldr-gap-item';
-    div.innerHTML = '<div><span class="yr">'+y+'</span> <span class="detail">— '+ldrState.activeFund+' holds '+refMap[y].toFixed(1)+'% here, you hold '+(mineMap[y]||0).toFixed(1)+'%</span></div><div class="detail">'+names+'</div>';
+    div.innerHTML = '<div><span class="yr">'+y+'</span> <span class="detail">— '+ldrState.activeFund+' holds '+(refMap[y]||0).toFixed(1)+'% here, you hold '+(mineMap[y]||0).toFixed(1)+'%</span></div><div class="detail">'+names+'</div>';
     gapsEl.appendChild(div);
   });
 }
