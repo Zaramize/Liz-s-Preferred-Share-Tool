@@ -2195,10 +2195,22 @@ function ldrUpdateLastUpdatedLabel(){
 // pattern across issuers, so ZPR (BMO) and HPR (Horizons) each need their
 // own link found the same way before they can use this path; until then
 // they keep using the stockanalysis.com + ticker-resolution path below.
+// Tested against real data (Aug 2026): BlackRock's official CSV export for
+// CPD is reachable and unblocked, but its "Ticker" column turned out to be
+// issuer-level, not per-series — e.g. every TC Energy preferred series in
+// the fund is labeled the identical "TRPCN", same for National Bank, TD,
+// Enbridge, etc. Its "Name" column is also truncated at a fixed length,
+// cut off before the "Series X" text that would otherwise let the
+// name-matching fallback disambiguate. Net effect: this source can't tell
+// one series apart from another, and using it was actively merging
+// distinct real holdings into one under the shared issuer-level code —
+// worse than stockanalysis.com's per-series (if internally-coded) rows.
+// Reverted to stockanalysis.com for CPD. Leaving the map empty rather than
+// removing this mechanism entirely: a genuinely per-series official CSV
+// (confirmed to have a unique ticker/series column, not just checked for
+// reachability) would still be worth wiring in here.
 const LDR_ISSUER_CSV_SOURCES = {
-  'CPD': 'https://www.blackrock.com/ca/investors/en/products/239836/ishares-sptsx-canadian-preferred-share-index-fund/1464253357814.ajax?fileType=csv&fileName=CPD_holdings&dataType=fund'
 };
-
 // Minimal quote-aware CSV line parser — a naive line.split(',') breaks on
 // issuer names that contain commas (e.g. "Enbridge Inc., Cumulative...").
 function ldrParseCsvLine(line){
