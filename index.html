@@ -2204,7 +2204,10 @@ async function ldrFetchHoldings(opts){
   let html = null, lastErr = null;
   setStatus('Fetching via server-side function…');
   try{
-    const res = await fetch('/api/fetch-holdings?url=' + encodeURIComponent(targetUrl));
+    const res = await Promise.race([
+      fetch('/api/fetch-holdings?url=' + encodeURIComponent(targetUrl)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('client-side timeout after 25s — the server-side function should have responded by now')), 25000))
+    ]);
     if(!res.ok){
       // Don't assume the body is JSON — a 404/500 from Cloudflare's own routing
       // (e.g. function file not found/not deployed) comes back as an HTML page,
