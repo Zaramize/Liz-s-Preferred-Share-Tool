@@ -2186,6 +2186,109 @@ function ldrUpdateLastUpdatedLabel(){
 
 // Pulls (or refreshes) top holdings for the active fund from stockanalysis.com.
 // `opts.silent` suppresses status-text noise for background auto-refreshes.
+// Known official "download holdings" links, found by hand by opening each
+// fund's own issuer page and reading the real download button's href — the
+// only reliable way. Guessed URL patterns consistently 404'd even when the
+// general endpoint shape was right, because the internal document ID is
+// per-fund and isn't derivable from the fund ticker or a formula. Add more
+// entries here as they're found for other funds — this is NOT a universal
+// pattern across issuers, so ZPR (BMO) and HPR (Horizons) each need their
+// own link found the same way before they can use this path; until then
+// they keep using the stockanalysis.com + ticker-resolution path below.
+const LDR_ISSUER_CSV_SOURCES = {
+  'CPD': 'https://www.blackrock.com/ca/investors/en/products/239836/ishares-sptsx-canadian-preferred-share-index-fund/1464253357814.ajax?fileType=csv&fileName=CPD_holdings&dataType=fund'
+};
+
+// Minimal quote-aware CSV line parser — a naive line.split(',') breaks on
+// issuer names that contain commas (e.g. "Enbridge Inc., Cumulative...").
+function ldrParseCsvLine(line){
+  const cells = [];
+  let cur = '', inQuotes = false;
+  for(let i=0;i<line.length;i++){
+    const c = line[i];
+    if(inQuotes){
+      if(c === '"'){ if(line[i+1] === '"'){ cur += '"'; i++; } else { inQuotes = false; } }
+      else cur += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ cells.push(cur); cur = ''; }
+      else cur += c;
+    }
+  }
+  cells.push(cur);
+  return cells.map(c => c.trim());
+}
+
+// Fetches a fund's holdings from its issuer's own official CSV export
+// instead of stockanalysis.com. Column positions are detected from the
+// actual header row at runtime rather than assumed — the same lesson
+// learned from the stockanalysis.com fixed-column-index bug earlier: never
+// hardcode a column position for a data layout that hasn't been directly
+// confirmed (every attempt to view this specific export's real content
+// triggered a native file download instead of rendering, so the exact
+// header wording here is still unverified — this is written to adapt to
+// whatever it actually is, not to a guess).
+async function ldrFetchHoldingsFromCsv(fund, csvUrl, opts){
+  const statusEl = document.getElementById('ldr-fetch-status');
+  const setStatus = (msg) => { if(!opts.silent && statusEl) statusEl.textContent = msg; };
+  setStatus('Fetching official holdings CSV…');
+
+  let text = null, lastErr = null;
+  try{
+    const res = await Promise.race([
+      fetch('/api/fetch-holdings?url=' + encodeURIComponent(csvUrl)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('client-side timeout after 25s')), 25000))
+    ]);
+    if(!res.ok){
+      let bodyText = '';
+      try{ bodyText = await res.text(); }catch(e){}
+      throw new Error('HTTP ' + res.status + ': ' + bodyText.slice(0,200));
+    }
+    const data = await res.json();
+    if(!data.html) throw new Error('empty response');
+    text = data.html; // field name is a holdover from the HTML fetch path — this is raw CSV text here
+  }catch(err){ lastErr = err; }
+
+  if(!text){ setStatus('Official CSV fetch failed for ' + fund + ' (' + (lastErr?.message||'unknown error') + ') — try again, or paste holdings manually.'); return; }
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // The real export likely has a few metadata lines (fund name, as-of date)
+  // before the actual header row — find the first line that plausibly looks
+  // like one, rather than assuming line 0 always is it.
+  const headerIdx = lines.findIndex(l => /ticker|symbol/i.test(l) && /name/i.test(l));
+  if(headerIdx === -1){ setStatus('Fetched the CSV (' + text.length + ' chars) but found no recognizable header row (needs both a Ticker/Symbol and a Name column) — export format may differ from expected; paste manually instead.'); return; }
+
+  const headers = ldrParseCsvLine(lines[headerIdx]).map(h => h.toLowerCase());
+  const tickerIdx = headers.findIndex(h => /ticker|symbol/.test(h));
+  const nameIdx = headers.findIndex(h => /^name$|security name|company/.test(h));
+  const weightIdx = headers.findIndex(h => /weight/.test(h));
+  if(tickerIdx === -1 || weightIdx === -1){ setStatus('Fetched the CSV but couldn\'t identify Ticker/Weight columns from the header row: "' + lines[headerIdx] + '" — export format may have changed.'); return; }
+
+  let added = 0, updated = 0, skipped = 0;
+  for(let i = headerIdx+1; i < lines.length; i++){
+    const cells = ldrParseCsvLine(lines[i]);
+    if(cells.length <= Math.max(tickerIdx, weightIdx)){ skipped++; continue; }
+    const ticker = (cells[tickerIdx]||'').trim();
+    const weight = parseFloat((cells[weightIdx]||'').replace('%','').replace(/[^0-9.\-]/g,''));
+    if(!ticker || isNaN(weight)){ skipped++; continue; }
+    const name = nameIdx > -1 ? (cells[nameIdx]||'').trim() : '';
+    const existing = ldrState.funds[fund].find(r => r.ticker === ticker);
+    if(existing){ existing.weight = weight; if(!existing.issuer && name) existing.issuer = name; updated++; }
+    else {
+      // Real ticker straight from the issuer — still cross-check
+      // LDR_TICKER_MAP by name for reset year/spread/floor, same as every
+      // other path, since this CSV only gives ticker/name/weight.
+      const ref = ldrMatchTicker(name || ticker);
+      ldrState.funds[fund].push({ ticker, issuer: name||'', year: ref?ref.year:null, spread: ref?ref.spread:null, floor: ref?ref.floor:null, weight });
+      added++;
+    }
+  }
+
+  ldrState.fundMeta[fund] = { lastFetched: new Date().toISOString() };
+  ldrSave(); ldrRender(); ldrUpdateLastUpdatedLabel();
+  setStatus('Official issuer CSV: ' + added + ' added, ' + updated + ' updated' + (skipped ? ', ' + skipped + ' row(s) skipped' : '') + ' — real tickers straight from the issuer, no name-matching guesswork for this fund.');
+}
+
 async function ldrFetchHoldings(opts){
   opts = opts || {};
   const statusEl = document.getElementById('ldr-fetch-status');
@@ -2193,6 +2296,11 @@ async function ldrFetchHoldings(opts){
   const fund = ldrState.activeFund;
   if(!fund){ setStatus('Add a fund tab first.'); return; }
   const symbol = fund.replace('.TO','').replace('.V','');
+
+  if(LDR_ISSUER_CSV_SOURCES[symbol]){
+    return ldrFetchHoldingsFromCsv(fund, LDR_ISSUER_CSV_SOURCES[symbol], opts);
+  }
+
   const targetUrl = 'https://stockanalysis.com/quote/tsx/' + encodeURIComponent(symbol) + '/holdings/';
 
   // Free third-party CORS proxies (corsproxy.io, allorigins, etc.) restrict their
