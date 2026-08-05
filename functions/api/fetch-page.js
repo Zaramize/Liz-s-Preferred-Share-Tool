@@ -48,11 +48,18 @@ export async function onRequestGet(context) {
     });
   }
 
+  // Same fix as fetch-holdings.js / tsx-symbols.js: bound the upstream wait
+  // so a slow/unresponsive IR page can't hang this function (and everything
+  // awaiting it) indefinitely.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
   try {
     const upstream = await fetch(targetUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PreferredShareTracker/1.0)' },
-      redirect: 'follow'
+      redirect: 'follow',
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
     if (!upstream.ok) {
       return new Response(JSON.stringify({ error: 'upstream returned ' + upstream.status }), {
         status: upstream.status,
@@ -78,7 +85,9 @@ export async function onRequestGet(context) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: 'Failed to fetch that page', detail: String(err) }), {
+    clearTimeout(timeoutId);
+    const timedOut = err && err.name === 'AbortError';
+    return new Response(JSON.stringify({ error: timedOut ? 'Timed out waiting for that page after 20s' : 'Failed to fetch that page', detail: String(err) }), {
       status: 502,
       headers: { 'Content-Type': 'application/json' }
     });
