@@ -2006,8 +2006,19 @@ function ldrMatchTicker(name){
 // Takes the LAST "Series X" occurrence in case the name mentions it twice.
 function ldrExtractSeriesToken(name){
   const upper = (name||'').toUpperCase().replace(/[.,]/g,'');
-  const matches = [...upper.matchAll(/\b(?:SERIES|SER|SR)\s+([A-Z0-9]+)\b/g)];
-  return matches.length ? matches[matches.length-1][1] : null;
+  // Primary: explicit "Series X" / "Ser X" / "Sr X" — and also "Class X" /
+  // "Cl X", confirmed as a real alternate convention (e.g. BCE's directory
+  // listing says "Series AF" but stockanalysis.com's holdings text for the
+  // same security says "Cl Af" instead).
+  const matches = [...upper.matchAll(/\b(?:SERIES|SER|SR|CLASS|CL)\s+([A-Z0-9]+)\b/g)];
+  if(matches.length) return matches[matches.length-1][1];
+  // Fallback: some real TSX directory entries omit the keyword entirely —
+  // confirmed e.g. Emera's Series J is literally listed as "EMERA INC PREF
+  // J", no "Series"/"Ser" at all. If a short (1-3 char) alphanumeric token
+  // immediately follows PREF/PFD at the very end of the string, treat it as
+  // the series designator.
+  const fallback = upper.match(/\b(?:PREF|PFD)\s+([A-Z0-9]{1,3})\s*$/);
+  return fallback ? fallback[1] : null;
 }
 
 // Resolves a holding's REAL TSX ticker from the full symbol directory
