@@ -1,5 +1,10 @@
 // functions/api/fetch-holdings.js
-const ALLOWED_HOSTS = ['stockanalysis.com'];
+// blackrock.com added for iShares ETFs' own official holdings CSV export
+// (e.g. CPD) — a primary source straight from the fund issuer, confirmed
+// reachable and NOT bot-blocked (unlike Yahoo/TipRanks, both tested and
+// ruled out). stockanalysis.com remains the fallback for funds without a
+// known official CSV link yet (see LDR_ISSUER_CSV_SOURCES in index.html).
+const ALLOWED_HOSTS = ['stockanalysis.com', 'www.blackrock.com'];
 
 export async function onRequestGet({ request }) {
   const { searchParams } = new URL(request.url);
