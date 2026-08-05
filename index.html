@@ -1978,7 +1978,71 @@ const LDR_TICKER_MAP = [
   { issuer:'brookfield', series:'42', ticker:'BN.PF.G', year:2030, spread:2.84, floor:null, confidence:'confirmed',
     summary:'Brookfield Corp Cumulative Class A Pref Series 42 (BN.PF.G). GOC-5yr + 2.84%. Resets every 5 yrs, next Jul 1 2030. Holder-interconvertible with floating Series 43. Source: bn.brookfield.com official IR page.' },
   { issuer:'intact', series:'3', ticker:'IFC.PR.C', year:2026, spread:2.66, floor:null, confidence:'confirmed',
-    summary:'Intact Financial Non-Cumulative Rate Reset Class A Series 3 (IFC.PR.C). GOC-5yr + 2.66%. Resets every 5 yrs, next Sep 30 2026. Non-cumulative. Source: Intact official shareholder-info document.' }
+    summary:'Intact Financial Non-Cumulative Rate Reset Class A Series 3 (IFC.PR.C). GOC-5yr + 2.66%. Resets every 5 yrs, next Sep 30 2026. Non-cumulative. Source: Intact official shareholder-info document.' },
+
+  // Added from a primary-source research pass, Aug 2026. NA.PR.C, ENB.PF.C,
+  // and BN.PF.G were re-confirmed by this same pass (same year/spread as
+  // already on file) and are NOT duplicated here. BPO.PR.C (Series CC) was
+  // excluded — confirmed being fully redeemed June 30 2026, no future
+  // reset applies. CU.PR.C (Series Y) and GWO.PF.A (Series 24) were left
+  // out — genuinely unconfirmed (CU's post-2022 status unknown; no dated
+  // GWO.PF.A reset notice found).
+  { issuer:'bce', series:'am', ticker:'BCE.PR.M', year:2031, spread:2.09, floor:null, confidence:'confirmed',
+    summary:'BCE Cumulative Redeemable First Pfd Series AM. Resets every 5 yrs to GOC-5yr + 2.09%, next Mar 31 2031. Holder-interconvertible with floating Series AN (BCE.PR.N). Source: BCE dividend-rate notice, Mar 2026.' },
+  { issuer:'tc energy', series:'7', ticker:'TRP.PR.D', year:2029, spread:2.38, floor:null, confidence:'confirmed',
+    summary:'TC Energy Cumulative Redeemable 1st Pfd Series 7 (TRP.PR.D). GOC-5yr + 2.38%, next reset Apr 30 2029. Holder-interconvertible with floating Series 8. Source: TC Energy dividend-rate notice, Apr 1 2024.' },
+  { issuer:'tc energy', series:'1', ticker:'TRP.PR.A', year:2029, spread:null, floor:null, confidence:'confirmed',
+    summary:'TC Energy Cumulative Redeemable 1st Pfd Series 1 (TRP.PR.A). Reset every 5 yrs, next Dec 31 2029. Spread over GOC-5yr not stated in the dividend-rate release itself (only the resulting all-in rate was) — treat spread as unconfirmed. Source: TC Energy notice, Dec 2 2024.' },
+  { issuer:'td', series:'16', ticker:'TD.PF.I', year:2027, spread:3.01, floor:null, confidence:'confirmed',
+    summary:'TD Non-Cumulative 5-Yr Rate Reset Series 16 NVCC (TD.PF.I). GOC-5yr + 3.01%, next reset Oct 31 2027. Non-cumulative. Source: TD prospectus supplement, Jul 7 2017; TD conversion release, Oct 2022.' },
+  { issuer:'td', series:'1', ticker:'TD.PF.A', year:2029, spread:2.24, floor:null, confidence:'confirmed',
+    summary:'TD Non-Cumulative 5-Yr Rate Reset Series 1 NVCC (TD.PF.A). GOC-5yr + 2.24%, next reset Oct 31 2029. Non-cumulative. Source: TD dividend-rate notice, Oct 1 2024.' },
+  { issuer:'td', series:'18', ticker:'TD.PF.J', year:2028, spread:null, floor:null, confidence:'confirmed',
+    summary:'TD Non-Cumulative 5-Yr Rate Reset Series 18 NVCC (TD.PF.J). Reset every 5 yrs, next Apr 30 2028 (not converted at 2023 reset). Spread not confirmed from a primary source yet. Source: TD prospectus supplement, Mar 7 2018; TD notice, Apr 18 2023.' },
+  { issuer:'enbridge', series:'13', ticker:'ENB.PF.E', year:2030, spread:2.66, floor:null, confidence:'confirmed',
+    summary:'Enbridge Cumulative Redeemable Pref Series 13 (ENB.PF.E). GOC-5yr + 2.66%, next reset Jun 1 2030. Holder-interconvertible with floating Series 14. Source: Enbridge Series 13 conversion notice, May 2 2025.' },
+  { issuer:'enbridge', series:'b', ticker:'ENB.PR.B', year:2027, spread:null, floor:null, confidence:'confirmed',
+    summary:'Enbridge Cumulative Redeemable Pref Series B (ENB.PR.B). Reset every 5 yrs, next Jun 1 2027. Spread not yet confirmed from a primary source (Enbridge posts each series\' prospectus supplement PDF on its own IR page — worth pulling directly to close this). Source: Enbridge IR preferred-shares page + Series B prospectus, 2011.' },
+  { issuer:'enbridge', series:'19', ticker:'ENB.PF.K', year:2028, spread:null, floor:null, confidence:'confirmed',
+    summary:'Enbridge Cumulative Redeemable Pref Series 19 (ENB.PF.K). Reset every 5 yrs, next Mar 1 2028. Spread not yet confirmed from a primary source. Source: Enbridge IR preferred-shares page.' },
+  { issuer:'enbridge', series:'n', ticker:'ENB.PR.N', year:2028, spread:null, floor:null, confidence:'confirmed',
+    summary:'Enbridge Cumulative Redeemable Pref Series N (ENB.PR.N). Reset every 5 yrs, next Dec 1 2028. Spread not yet confirmed from a primary source. Source: Enbridge IR preferred-shares page.' },
+  { issuer:'enbridge', series:'15', ticker:'ENB.PF.G', year:2030, spread:null, floor:null, confidence:'confirmed',
+    summary:'Enbridge Cumulative Redeemable Pref Series 15 (ENB.PF.G). Reset every 5 yrs, next Sep 1 2030. Spread not yet confirmed from a primary source. Source: Enbridge Series 15 conversion notice, Aug 5 2025.' },
+  { issuer:'manulife', series:'19', ticker:'MFC.PR.N', year:2030, spread:2.30, floor:null, confidence:'confirmed',
+    summary:'Manulife Non-Cumulative Rate Reset Class 1 Series 19 (MFC.PR.N). GOC-5yr + 2.30%, next reset Mar 19 2030. Non-cumulative. Source: Manulife dividend-rate notice, Feb 18 2025.' },
+  { issuer:'brookfield', series:'24', ticker:'BN.PR.R', year:2031, spread:2.30, floor:null, confidence:'confirmed',
+    summary:'Brookfield Corp Cumulative Class A Pref Series 24 (BN.PR.R). GOC-5yr + 2.30%, next reset Jul 1 2031. Source: Brookfield reset-dividend-rate notice, Jun 1 2026.' },
+  { issuer:'brookfield', series:'32', ticker:'BN.PF.A', year:2028, spread:2.90, floor:null, confidence:'confirmed',
+    summary:'Brookfield Corp Cumulative Class A Pref Series 32 (BN.PF.A). GOC-5yr + 2.90%, next reset Oct 1 2028. Source: Brookfield reset-dividend-rate notice, Sep 1 2023.' },
+  { issuer:'brookfield', series:'48', ticker:'BN.PF.J', year:2028, spread:3.10, floor:4.75, confidence:'confirmed',
+    summary:'Brookfield Corp Cumulative Class A Pref Series 48 (BN.PF.J). MINIMUM rate reset: greater of GOC-5yr + 3.10% or 4.75% floor, next reset Jan 1 2028. Source: Brookfield reset-dividend-rate notice, Dec 2 2022.' },
+  { issuer:'transalta', series:'a', ticker:'TA.PR.D', year:2031, spread:2.03, floor:null, confidence:'confirmed',
+    summary:'TransAlta Cumulative Redeemable Rate Reset 1st Pfd Series A (TA.PR.D — ticker letter D, real series name is A). GOC-5yr + 2.03%, next reset Mar 31 2031 (not redeemed at Mar 2026 reset). Source: TransAlta prospectus supplement, Dec 3 2010; conversion notice, Mar 2026.' },
+  { issuer:'transalta', series:'c', ticker:'TA.PR.F', year:2027, spread:3.10, floor:null, confidence:'confirmed',
+    summary:'TransAlta Cumulative Redeemable Rate Reset 1st Pfd Series C (TA.PR.F — ticker letter F, real series name is C). GOC-5yr + 3.10%, next reset Jun 30 2027. Source: TransAlta conversion-results notice, Jun 16 2022.' },
+  { issuer:'pembina', series:'7', ticker:'PPL.PR.G', year:2029, spread:2.94, floor:null, confidence:'confirmed',
+    summary:'Pembina Pipeline Cumulative Redeemable Rate Reset Class A Series 7 (PPL.PR.G). GOC-5yr + 2.94%, next reset Dec 1 2029. Source: pembina.com dividend-rate notice, Nov 1 2024.' },
+  { issuer:'power financial', series:'p', ticker:'PWF.PR.P', year:2031, spread:1.60, floor:null, confidence:'confirmed',
+    summary:'Power Financial Non-Cumulative 5-Yr Rate Reset 1st Pfd Series P (PWF.PR.P). GOC-5yr + 1.60%, next reset Jan 31 2031. Non-cumulative. Source: Power Financial dividend-rate notice, Jan 2 2026.' },
+  { issuer:'emera', series:'j', ticker:'EMA.PR.J', year:2031, spread:3.28, floor:4.25, confidence:'confirmed',
+    summary:'Emera Cumulative MINIMUM Rate Reset 1st Pfd Series J (EMA.PR.J). Greater of GOC-5yr + 3.28% or 4.25% floor, next reset May 15 2031. Source: Emera dividend-rate notice, Apr 15 2026 (floor set at original Mar 2021 offering).' },
+  { issuer:'national bank', series:'40', ticker:'NA.PR.E', year:2028, spread:2.58, floor:null, confidence:'confirmed',
+    summary:'National Bank Non-Cumulative 5-Yr Rate Reset 1st Pfd Series 40 NVCC (NA.PR.E). GOC-5yr + 2.58%, next reset May 15 2028. Non-cumulative. Source: National Bank dividend-rate release, Apr 2023.' },
+  { issuer:'national bank', series:'42', ticker:'NA.PR.G', year:2028, spread:2.77, floor:null, confidence:'confirmed',
+    summary:'National Bank Non-Cumulative 5-Yr Rate Reset 1st Pfd Series 42 NVCC (NA.PR.G). GOC-5yr + 2.77%, next reset Nov 15 2028. Non-cumulative. Source: National Bank dividend-rate release, Oct 2023.' },
+  { issuer:'brookfield office properties', series:'n', ticker:'BPO.PR.N', year:2031, spread:3.07, floor:null, confidence:'confirmed',
+    summary:'Brookfield Office Properties Class AAA Pref Series N (BPO.PR.N). GOC-5yr + 3.07% (inferred from paired floating Series O\'s disclosed spread — worth verifying against the original prospectus), next reset Jul 1 2031. BOP is a Brookfield Property Partners subsidiary since 2013, no independent IR page. Source: Brookfield reset-dividend-rate notice, Jun 1 2026.' },
+  { issuer:'brookfield office properties', series:'ee', ticker:'BPO.PR.EE', year:2027, spread:null, floor:null, confidence:'confirmed',
+    summary:'Brookfield Office Properties Class AAA Pref Series EE (BPO.PR.EE). Reset every 5 yrs, next Mar 31 2027. Spread not yet confirmed from a primary source. BOP is a Brookfield Property Partners subsidiary since 2013, no independent IR page. Source: Brookfield reset-dividend-rate notice, Mar 2 2022.' },
+
+  // Confirmed fixed-rate perpetuals (no reset date, ever) — the `structure`
+  // field lets a fetch auto-classify these into the diagram's Perpetual
+  // rung instead of leaving them permanently "Unconfirmed."
+  { issuer:'power financial', series:'k', ticker:'PWF.PR.K', year:null, spread:null, floor:null, structure:'perpetual', confidence:'confirmed',
+    summary:'Power Financial 4.95% Non-Cumulative 1st Pfd Series K (PWF.PR.K). Fixed-rate perpetual, no reset. Pays $1.2375/yr. Source: Series K prospectus (via aggregator secondary confirmation — structure only, not the rate).' },
+  { issuer:'great-west lifeco', series:'h', ticker:'GWO.PR.H', year:null, spread:null, floor:null, structure:'perpetual', confidence:'confirmed',
+    summary:'Great-West Lifeco 4.85% Non-Cumulative 1st Pfd Series H (GWO.PR.H). Fixed-rate perpetual, no reset. Source: TMX Money listing; Series H prospectus.' },
 
   // Example of the new aggregator tier (not added yet — for reference only):
   // { issuer:'cenovus', series:'a', ticker:'CVE.PR.A', year:2027, spread:3.90, floor:null,
@@ -2006,11 +2070,12 @@ function ldrMatchTicker(name){
 // Takes the LAST "Series X" occurrence in case the name mentions it twice.
 function ldrExtractSeriesToken(name){
   const upper = (name||'').toUpperCase().replace(/[.,]/g,'');
-  // Primary: explicit "Series X" / "Ser X" / "Sr X" — and also "Class X" /
-  // "Cl X", confirmed as a real alternate convention (e.g. BCE's directory
-  // listing says "Series AF" but stockanalysis.com's holdings text for the
-  // same security says "Cl Af" instead).
-  const matches = [...upper.matchAll(/\b(?:SERIES|SER|SR|CLASS|CL)\s+([A-Z0-9]+)\b/g)];
+  // Primary: explicit "Series X" / "Ser X" / "Sr X" / "Class X" / "Cl X" —
+  // the token can also be wrapped in hyphens, a third real convention found
+  // in the data (e.g. "Series -7-", "Series -AI-", "Series -24-") that a
+  // plain \s+([A-Z0-9]+) wouldn't match since the hyphen sits between the
+  // whitespace and the actual letters/digits.
+  const matches = [...upper.matchAll(/\b(?:SERIES|SER|SR|CLASS|CL)\s+-?([A-Z0-9]+)-?\b/g)];
   if(matches.length) return matches[matches.length-1][1];
   // Fallback: some real TSX directory entries omit the keyword entirely —
   // confirmed e.g. Emera's Series J is literally listed as "EMERA INC PREF
@@ -2411,6 +2476,12 @@ async function ldrFetchHoldings(opts){
     const symbolRaw = cells[weightIdx-2], name = cells[weightIdx-1], weightRaw = cells[weightIdx];
     const weight = parseFloat(weightRaw.replace('%',''));
     if(!symbolRaw || isNaN(weight)){ skippedNoWeight++; return; }
+    // Some funds carry a swap/derivative or cash sleeve line item with no
+    // real ticker (seen live: ticker "n/a", name "Trs R Sptsen P Cdor01" —
+    // a rate swap, not a preferred share). These aren't holdings the ladder
+    // can ever meaningfully place, so skip them rather than adding a
+    // permanently-unresolvable "n/a" chip.
+    if(/^n\/?a$/i.test(symbolRaw.trim())){ skippedNoWeight++; return; }
     const ref = ldrMatchTicker(name);
     // Not in LDR_TICKER_MAP (no reset year/spread available), but we can
     // still resolve its REAL ticker from the TSX directory instead of
@@ -2433,11 +2504,11 @@ async function ldrFetchHoldings(opts){
       // Live-update path: refresh weight (and fill in terms if we can now
       // match a ticker that was previously unconfirmed), never duplicate.
       existing.weight = weight;
-      if(ref && existing.year == null){ existing.year = ref.year; existing.spread = ref.spread; existing.floor = ref.floor; }
+      if(ref && existing.year == null && existing.structure !== 'perpetual'){ existing.year = ref.year; existing.spread = ref.spread; existing.floor = ref.floor; existing.structure = ref.structure || (ref.year ? 'reset' : undefined); }
       if(!existing.issuer && name) existing.issuer = name;
       updated++;
     } else {
-      if(ref){ ldrState.funds[fund].push({ ticker: ref.ticker, issuer: name||'', year: ref.year, spread: ref.spread, floor: ref.floor, weight }); matched++; }
+      if(ref){ ldrState.funds[fund].push({ ticker: ref.ticker, issuer: name||'', year: ref.year, spread: ref.spread, floor: ref.floor, structure: ref.structure || (ref.year ? 'reset' : undefined), weight }); matched++; }
       else { ldrState.funds[fund].push({ ticker: ticker, issuer: name||'', year: null, spread: null, floor: null, weight }); if(resolvedTicker) resolved++; }
       added++;
     }
