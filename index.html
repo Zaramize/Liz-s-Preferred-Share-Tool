@@ -2227,22 +2227,37 @@ function ldrRenderMaturitySearch(){
 // (from LDR_TICKER_MAP or wherever it was already tracked). Weight starts
 // at 0 since this isn't a fund holding with a real portfolio weight — just
 // a placeholder entry the person can edit like any manually-added row.
-function ldrAddToMineFromSearch(ticker){
-  if(ldrState.mine.some(r => r.ticker === ticker)){ alert(ticker+' is already on your ladder.'); return; }
-  const libEntry = LDR_TICKER_MAP.find(t => t.ticker === ticker);
-  const fundEntry = Object.values(ldrState.funds).flat().find(r => r.ticker === ticker);
-  const source = libEntry || fundEntry;
-  if(!source){ alert('Couldn\'t find data for '+ticker+' — try adding it manually instead.'); return; }
+// Shared by both "Add to my ladder" entry points (maturity search list and
+// diagram chips) so there's one tested code path instead of two similar but
+// separately-maintained copies.
+function ldrPushToMine(ticker, sourceRow){
+  if(ldrState.mine.some(r => r.ticker === ticker)){ alert(ticker+' is already on your ladder.'); return false; }
+  if(!sourceRow){ alert('Couldn\'t find data for '+ticker+' — try adding it manually instead.'); return false; }
   ldrState.mine.push({
     ticker,
-    issuer: source.issuer || '',
-    year: source.year != null ? source.year : null,
-    spread: source.spread != null ? source.spread : null,
-    floor: source.floor != null ? source.floor : null,
-    structure: source.structure || (source.year ? 'reset' : undefined),
+    issuer: sourceRow.issuer || '',
+    year: sourceRow.year != null ? sourceRow.year : null,
+    spread: sourceRow.spread != null ? sourceRow.spread : null,
+    floor: sourceRow.floor != null ? sourceRow.floor : null,
+    structure: sourceRow.structure || (sourceRow.year ? 'reset' : undefined),
     weight: 0
   });
   ldrSave(); ldrRender();
+  return true;
+}
+
+function ldrAddToMineFromSearch(ticker){
+  const libEntry = LDR_TICKER_MAP.find(t => t.ticker === ticker);
+  const fundEntry = Object.values(ldrState.funds).flat().find(r => r.ticker === ticker);
+  ldrPushToMine(ticker, libEntry || fundEntry);
+}
+
+// Called from a reference-fund chip's small "+" in the diagram — adds that
+// exact holding (same fund, same index) straight onto the user's ladder.
+function ldrAddDiagramChipToMine(fundName, idx){
+  const row = (ldrState.funds[fundName]||[])[idx];
+  if(!row){ alert('Could not find that holding — try refreshing the diagram.'); return; }
+  ldrPushToMine(row.ticker, row);
 }
 
 // Hover shows the summary via the title attribute (works well on desktop);
@@ -2931,7 +2946,12 @@ function ldrRenderDiagram(){
     if(tier === 'aggregator'){ borderStyle = 'border:1px dashed #e8a33d;'; badge = ' 3rd-party'; }
     else if(tier === 'estimated'){ borderStyle = 'border:1px dashed #ffffff88;'; badge = ' ~'; }
     const marker = isPerpetual ? '' : (!r.year ? ' ?' : '');
-    return '<span class="'+cls+'" data-target="'+x.target+'" data-idx="'+x.i+'" style="'+borderStyle+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight!=null?r.weight.toFixed(1)+'%':'')+badge+marker+'</span>';
+    // Only reference-fund chips get the quick-add — "mine" chips are
+    // already on the ladder, nothing to add.
+    const addBtn = x.target === 'ref'
+      ? '<span onclick="event.stopPropagation(); ldrAddDiagramChipToMine(\''+fundName.replace(/'/g,"\\'")+'\', '+x.i+')" title="Add to my ladder" style="display:inline-block; margin-left:5px; width:14px; height:14px; line-height:13px; text-align:center; border-radius:3px; background:rgba(0,0,0,0.28); font-weight:700; cursor:pointer;">+</span>'
+      : '';
+    return '<span class="'+cls+'" data-target="'+x.target+'" data-idx="'+x.i+'" style="'+borderStyle+'" title="'+chipTitle(r).replace(/"/g,'&quot;')+'"><b>'+r.ticker+'</b> '+(r.weight!=null?r.weight.toFixed(1)+'%':'')+badge+marker+addBtn+'</span>';
   }
 
   years.forEach(y => {
