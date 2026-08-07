@@ -421,10 +421,10 @@
 
         <div class="ldr-side-title">Search by maturity</div>
         <div style="display:flex; gap:6px; margin-bottom:8px;">
-          <input type="number" id="ldr-mat-from" placeholder="From yr" style="width:70px; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:5px 6px; font-size:12px;">
-          <input type="number" id="ldr-mat-to" placeholder="To yr" style="width:70px; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:5px 6px; font-size:12px;">
+          <input type="number" id="ldr-mat-from" placeholder="e.g. 2027 or 2" style="width:90px; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:5px 6px; font-size:12px;">
+          <input type="number" id="ldr-mat-to" placeholder="e.g. 2030 or 5" style="width:90px; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:5px 6px; font-size:12px;">
         </div>
-        <div style="font-size:10px; color:var(--muted); margin-bottom:6px;">Searches the researched ticker library plus any reset years you've confirmed on your ladder or reference funds.</div>
+        <div style="font-size:10px; color:var(--muted); margin-bottom:6px;">Type a real year (2027) or a small number of years from now (2 = 2028). Searches the researched ticker library plus any reset years you've confirmed on your ladder or reference funds.</div>
         <div id="ldr-mat-results"></div>
 
         <div class="ldr-side-title">Pending promotion <span id="ldr-promote-count" style="color:var(--muted); font-weight:400;"></span></div>
@@ -2182,8 +2182,14 @@ function ldrRenderMaturitySearch(){
   if(!el) return;
   const fromV = document.getElementById('ldr-mat-from').value;
   const toV = document.getElementById('ldr-mat-to').value;
-  const from = fromV ? parseInt(fromV,10) : null;
-  const to = toV ? parseInt(toV,10) : null;
+  // A typed value under 100 is treated as "N years from now" rather than a
+  // literal year — otherwise typing "2" meaning "maturing in 2 years" was
+  // silently interpreted as "from the year 2 AD", which technically matched
+  // everything (any real year is >= 2) instead of erroring or doing what
+  // was actually meant.
+  const resolveYear = (v) => { if(!v) return null; const n = parseInt(v,10); if(isNaN(n)) return null; return n < 100 ? (new Date().getFullYear() + n) : n; };
+  const from = resolveYear(fromV);
+  const to = resolveYear(toV);
   if(from == null && to == null){ el.innerHTML = ''; return; }
   const inRange = (y) => y != null && (from == null || y >= from) && (to == null || y <= to);
 
@@ -2201,12 +2207,42 @@ function ldrRenderMaturitySearch(){
                    : r.tier === 'estimated' ? ' <span style="color:#ffffff88;">[estimated]</span>' : '';
     const entry = LDR_TICKER_MAP.find(t => t.ticker === r.ticker);
     const summary = entry ? entry.summary + ldrConfidenceLabel(entry) : 'No researched summary on file yet for '+r.ticker+' — this year came from '+r.source+' directly.';
+    const alreadyOnLadder = r.source === 'your ladder';
+    const addBtn = alreadyOnLadder
+      ? '<span style="color:var(--teal); font-size:10px;">✓ on your ladder</span>'
+      : '<button onclick="event.stopPropagation(); ldrAddToMineFromSearch(\''+r.ticker.replace(/'/g,"\\'")+'\')" style="background:var(--teal); color:#04211c; border:none; border-radius:4px; padding:2px 7px; font-size:10px; font-weight:600; cursor:pointer;">+ Add to my ladder</button>';
     return '<div style="font-size:11px; padding:5px 0; border-bottom:1px solid #1a212b; cursor:pointer;" title="'+summary.replace(/"/g,'&quot;')+'" onclick="ldrToggleMatDetail('+i+')">'
-      + '<span style="font-family:var(--mono); font-weight:600;">'+r.ticker+'</span> — '+r.year+(r.spread!=null?' · +'+r.spread+'%':'')+tierTag
-      + '<br><span style="color:var(--muted);">'+(r.issuer||'')+' ('+r.source+')</span>'
+      + '<div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">'
+      + '<div><span style="font-family:var(--mono); font-weight:600;">'+r.ticker+'</span> — '+r.year+(r.spread!=null?' · +'+r.spread+'%':'')+tierTag+'</div>'
+      + addBtn
+      + '</div>'
+      + '<span style="color:var(--muted);">'+(r.issuer||'')+' ('+r.source+')</span>'
       + '<div id="ldr-mat-detail-'+i+'" style="display:none; margin-top:4px; padding-top:4px; border-top:1px dashed #333; color:var(--muted); white-space:normal;">'+summary+'</div>'
       + '</div>';
   }).join('');
+}
+
+// Adds a maturity-search result straight onto the user's own ladder ("mine"),
+// pulling whatever year/spread/floor/structure data is available for it
+// (from LDR_TICKER_MAP or wherever it was already tracked). Weight starts
+// at 0 since this isn't a fund holding with a real portfolio weight — just
+// a placeholder entry the person can edit like any manually-added row.
+function ldrAddToMineFromSearch(ticker){
+  if(ldrState.mine.some(r => r.ticker === ticker)){ alert(ticker+' is already on your ladder.'); return; }
+  const libEntry = LDR_TICKER_MAP.find(t => t.ticker === ticker);
+  const fundEntry = Object.values(ldrState.funds).flat().find(r => r.ticker === ticker);
+  const source = libEntry || fundEntry;
+  if(!source){ alert('Couldn\'t find data for '+ticker+' — try adding it manually instead.'); return; }
+  ldrState.mine.push({
+    ticker,
+    issuer: source.issuer || '',
+    year: source.year != null ? source.year : null,
+    spread: source.spread != null ? source.spread : null,
+    floor: source.floor != null ? source.floor : null,
+    structure: source.structure || (source.year ? 'reset' : undefined),
+    weight: 0
+  });
+  ldrSave(); ldrRender();
 }
 
 // Hover shows the summary via the title attribute (works well on desktop);
