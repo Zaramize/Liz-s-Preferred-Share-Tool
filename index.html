@@ -444,6 +444,7 @@
         <div class="ldr-tabs">
           <div class="ldr-tab active" data-ldrtab="comparator">Comparator</div>
           <div class="ldr-tab" data-ldrtab="diagram">Ladder Diagram</div>
+          <div class="ldr-tab" data-ldrtab="fundinfo">Fund Info</div>
         </div>
 
         <div class="ldr-view active" id="ldr-view-comparator">
@@ -533,6 +534,16 @@
             </div>
             <div class="ldr-helper" style="margin-top:0; margin-bottom:14px;">Each rung is a reset year. Hover a chip for its prospectus summary, spread, and floor. Teal = your ladder, amber = reference fund.</div>
             <div class="ldr-ladder-wrap" id="ldr-ladder-wrap"></div>
+          </div>
+        </div>
+
+        <div class="ldr-view" id="ldr-view-fundinfo">
+          <div class="ldr-panel">
+            <div class="ldr-panel-header">
+              <div class="ldr-panel-title">Fund Info</div>
+            </div>
+            <div class="ldr-helper" style="margin-top:0; margin-bottom:14px;">Manager, mandate, and structure for each fund in your reference universe — not portfolio data, just background on the funds themselves.</div>
+            <div id="ldr-fundinfo-body"></div>
           </div>
         </div>
       </div>
@@ -1978,6 +1989,80 @@ const LDR_FUND_UNIVERSE = [
   { symbol:'RPF', style:'Active manager' }
 ];
 
+// Background on each fund itself — manager, mandate, benchmark. Researched
+// directly (issuer fund-facts documents, MRFPs, and fund-manager product
+// pages) Aug 2026, not guessed. This is fund-level context, separate from
+// LDR_TICKER_MAP (which is about individual preferred share series) — kept
+// as its own table since the two rarely need to change together.
+const LDR_FUND_INFO = {
+  'ZPR': { manager:'BMO Asset Management', badge:'Largest in Canada', badgeColor:'accent', styleTag:'Passive',
+    structure:'Laddered', benchmark:'Solactive Laddered Canadian Preferred Share Index',
+    notable:'~70% of TSX preferred issues',
+    summary:'Passive, laddered across 5 reset-year buckets to spread reinvestment risk. The largest and most-traded Canadian preferred share ETF, holding roughly 70% of outstanding TSX preferred issues.' },
+  'HLPR': { manager:'Global X Investments Canada', badge:'Synthetic structure', badgeColor:'warning', styleTag:'Passive',
+    structure:'Laddered, synthetic', benchmark:'Solactive Laddered Canadian Preferred Share Index',
+    notable:'Swap-based, not physical',
+    summary:'Passive, laddered — tracks the same index as ZPR. Uses swaps rather than holding shares directly (a "Corporate Class" structure), so its reported holdings behave differently from a normal physical portfolio — this is why it often shows minimal or unusual holdings data in this tool.' },
+  'CPD': { manager:'iShares (BlackRock Canada)', badge:'Broadest, oldest', badgeColor:'accent', styleTag:'Passive',
+    structure:'Broad market', benchmark:'S&P/TSX Preferred Share Index',
+    notable:'~175-225 holdings',
+    summary:'Passive, broad market. Tracks the S&P/TSX Preferred Share Index across roughly 175 to 225 holdings, spanning rate-reset, perpetual, and floating-rate structures. One of the oldest funds in the category.' },
+  'HPR': { manager:'Global X, sub-advised by Fiera Capital', badge:'Active', badgeColor:'success', styleTag:'Active',
+    structure:'Credit-picked', benchmark:'None (actively managed)',
+    notable:'Sub-advised by Fiera',
+    summary:'Actively managed. Fiera Capital hand-picks the best-value series from each issuer using credit analysis, rather than holding whatever a fixed index requires.' },
+  'RPF': { manager:'RBC Global Asset Management', badge:'Active', badgeColor:'success', styleTag:'Active',
+    structure:'Discretionary', benchmark:'None (actively managed)',
+    notable:"Run by RBC's own team",
+    summary:"Actively managed Canadian preferred share portfolio, run by RBC's own team rather than tracking a fixed index." }
+};
+
+function ldrFundInfoBadgeColors(name){
+  return { accent:['#e6f1fb','#0c447c'], warning:['#faeeda','#633806'], success:['#eaf3de','#27500a'] }[name] || ['#e6f1fb','#0c447c'];
+}
+
+function ldrRenderFundInfo(){
+  const el = document.getElementById('ldr-fundinfo-body');
+  if(!el) return;
+  const funds = LDR_FUND_UNIVERSE.filter(f => LDR_FUND_INFO[f.symbol]);
+  if(!funds.length){ el.innerHTML = '<div class="ldr-empty">No fund background on file yet.</div>'; return; }
+
+  // Summary comparison table first, for a quick glance across all funds.
+  let html = '<div style="overflow-x:auto; margin-bottom:20px;"><table style="width:100%; border-collapse:collapse; font-size:12px;">';
+  html += '<tr><td style="padding:6px 8px;"></td>' + funds.map(f=>'<td style="padding:6px 8px; font-weight:600; text-align:center;">'+f.symbol+'</td>').join('') + '</tr>';
+  const rows = [
+    ['Manager', f=>f.manager],
+    ['Style', f=>f.styleTag],
+    ['Structure', f=>f.structure],
+    ['Benchmark', f=>f.benchmark],
+    ['Notable', f=>f.notable]
+  ];
+  rows.forEach(([label, getter], i) => {
+    html += '<tr style="border-top:1px solid #1a212b;' + (i%2?' background:rgba(255,255,255,0.02);':'') + '">';
+    html += '<td style="padding:8px; color:var(--muted);">'+label+'</td>';
+    funds.forEach(f => { html += '<td style="padding:8px; text-align:center;">'+getter(LDR_FUND_INFO[f.symbol])+'</td>'; });
+    html += '</tr>';
+  });
+  html += '</table></div>';
+
+  // Then a fuller card per fund below.
+  html += '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px;">';
+  funds.forEach(f => {
+    const info = LDR_FUND_INFO[f.symbol];
+    const [bg, fg] = ldrFundInfoBadgeColors(info.badgeColor);
+    html += '<div style="background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px;">'
+      + '<div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">'
+      + '<span style="font-weight:700; font-size:14px;">'+f.symbol+'</span>'
+      + '<span style="background:'+bg+'; color:'+fg+'; font-size:11px; padding:2px 8px; border-radius:4px;">'+info.badge+'</span>'
+      + '</div>'
+      + '<div style="font-size:12px; color:var(--muted); margin-bottom:6px;">'+info.manager+'</div>'
+      + '<div style="font-size:12px; line-height:1.6;">'+info.summary+'</div>'
+      + '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 // LDR_TICKER_MAP — sourcing rule (updated):
 // `confidence` has three allowed values, and every entry MUST carry one:
 //   'confirmed'  — traced to the issuer's own prospectus or press release.
@@ -2166,7 +2251,9 @@ function ldrSwitchTab(name){
   document.querySelectorAll('.ldr-tab').forEach(t => t.classList.toggle('active', t.dataset.ldrtab === name));
   document.getElementById('ldr-view-comparator').classList.toggle('active', name === 'comparator');
   document.getElementById('ldr-view-diagram').classList.toggle('active', name === 'diagram');
+  document.getElementById('ldr-view-fundinfo').classList.toggle('active', name === 'fundinfo');
   if(name === 'diagram') ldrRenderDiagram();
+  if(name === 'fundinfo') ldrRenderFundInfo();
 }
 
 document.getElementById('ldr-mat-from').addEventListener('input', ldrRenderMaturitySearch);
