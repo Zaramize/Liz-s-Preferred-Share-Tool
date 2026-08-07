@@ -2171,11 +2171,24 @@ function ldrRenderMaturitySearch(){
   results.sort((a,b) => a.year - b.year);
 
   if(!results.length){ el.innerHTML = '<div class="ldr-empty" style="font-size:11px;">No confirmed-maturity shares in that range yet.</div>'; return; }
-  el.innerHTML = results.map(r => {
+  el.innerHTML = results.map((r, i) => {
     const tierTag = r.tier === 'aggregator' ? ' <span style="color:#e8a33d;">[3rd-party: '+(r.sourceName||'aggregator')+']</span>'
                    : r.tier === 'estimated' ? ' <span style="color:#ffffff88;">[estimated]</span>' : '';
-    return '<div style="font-size:11px; padding:5px 0; border-bottom:1px solid #1a212b;"><span style="font-family:var(--mono); font-weight:600;">'+r.ticker+'</span> — '+r.year+(r.spread!=null?' · +'+r.spread+'%':'')+tierTag+'<br><span style="color:var(--muted);">'+(r.issuer||'')+' ('+r.source+')</span></div>';
+    const entry = LDR_TICKER_MAP.find(t => t.ticker === r.ticker);
+    const summary = entry ? entry.summary + ldrConfidenceLabel(entry) : 'No researched summary on file yet for '+r.ticker+' — this year came from '+r.source+' directly.';
+    return '<div style="font-size:11px; padding:5px 0; border-bottom:1px solid #1a212b; cursor:pointer;" title="'+summary.replace(/"/g,'&quot;')+'" onclick="ldrToggleMatDetail('+i+')">'
+      + '<span style="font-family:var(--mono); font-weight:600;">'+r.ticker+'</span> — '+r.year+(r.spread!=null?' · +'+r.spread+'%':'')+tierTag
+      + '<br><span style="color:var(--muted);">'+(r.issuer||'')+' ('+r.source+')</span>'
+      + '<div id="ldr-mat-detail-'+i+'" style="display:none; margin-top:4px; padding-top:4px; border-top:1px dashed #333; color:var(--muted); white-space:normal;">'+summary+'</div>'
+      + '</div>';
   }).join('');
+}
+
+// Hover shows the summary via the title attribute (works well on desktop);
+// this click-to-toggle covers touch devices where hover tooltips don't fire.
+function ldrToggleMatDetail(i){
+  const el = document.getElementById('ldr-mat-detail-'+i);
+  if(el) el.style.display = (el.style.display === 'none' ? 'block' : 'none');
 }
 
 // ---------- Promotion (aggregator/estimated -> confirmed) ----------
