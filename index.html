@@ -1598,18 +1598,43 @@ function summarizeTermsLine(full, sourceType, sourceUrl, error, note){
   if(!full || (full.currentRate==null && full.type==null)){
     return '⚠ Fetched the issuer\'s IR page but couldn\'t find this specific series clearly described in it — verify manually.'+(note?'<br><span style="color:var(--amber);">⚠ '+note+'</span>':'');
   }
-  const bits = [];
-  if(full.currentRate!=null) bits.push(full.currentRate+'%');
-  if(full.type) bits.push(full.type==='reset' ? '5-yr GoC reset' : full.type==='floating' ? '3-mo T-bill float' : 'fixed perpetual');
-  if(full.spreadBps!=null) bits.push('+'+(full.spreadBps/100).toFixed(2)+'% spread');
-  if(full.nextResetDate) bits.push('next reset '+full.nextResetDate);
-  if(full.cumulative!=null) bits.push(full.cumulative ? 'cumulative' : 'non-cumulative');
+
+  // Reads as real sentences instead of terse dot-separated bullets — and
+  // when a field wasn't found in the extraction, that gets said explicitly
+  // ("spread not confirmed from this page") rather than the fact just
+  // silently vanishing from the line with no indication anything's missing.
+  const sentences = [];
+
+  let structure;
+  if(full.type === 'reset'){
+    structure = 'This is a 5-year rate-reset preferred share, resetting every 5 years to the 5-year Government of Canada bond yield'
+      + (full.spreadBps!=null ? ' plus '+(full.spreadBps/100).toFixed(2)+'%' : ' (exact spread not confirmed from this page)') + '.';
+  } else if(full.type === 'floating'){
+    structure = 'This is a floating-rate preferred share, paying the 3-month Government of Canada T-bill yield'
+      + (full.spreadBps!=null ? ' plus '+(full.spreadBps/100).toFixed(2)+'%' : ' (exact spread not confirmed from this page)') + '.';
+  } else if(full.type === 'fixed'){
+    structure = 'This is a fixed-rate perpetual preferred share — no reset date, the rate stays the same indefinitely.';
+  } else {
+    structure = 'The reset structure wasn\'t clearly confirmed from this page.';
+  }
+  sentences.push(structure);
+
+  if(full.currentRate!=null){
+    sentences.push('It currently pays '+full.currentRate+'% annually'+(full.nextResetDate ? ', next resetting '+full.nextResetDate : (full.type==='reset'||full.type==='floating' ? ' (next reset date not confirmed from this page)' : ''))+'.');
+  } else if(full.nextResetDate){
+    sentences.push('Next reset date: '+full.nextResetDate+' (the current rate itself wasn\'t confirmed from this page).');
+  }
+
+  if(full.cumulative!=null){
+    sentences.push(full.cumulative ? 'Dividends are cumulative — any missed payment accrues and must eventually be paid.' : 'Dividends are non-cumulative — a missed payment is simply gone.');
+  }
+
   const typeLabel = sourceTypeLabel(sourceType);
   const sourceHtml = sourceUrl
-    ? ' · <span style="color:var(--teal);">source: '+(typeLabel||'page')+'</span> (<a href="'+sourceUrl+'" target="_blank" rel="noopener" style="color:var(--teal);">'+sourceUrl+'</a>)'
-    : ' · <span style="color:var(--amber);">no source URL — verify manually</span>';
+    ? ' <span style="color:var(--teal);">Source: '+(typeLabel||'issuer page')+'</span> (<a href="'+sourceUrl+'" target="_blank" rel="noopener" style="color:var(--teal);">'+sourceUrl+'</a>)'
+    : ' <span style="color:var(--amber);">No source URL — verify manually.</span>';
   const noteHtml = note ? '<br><span style="color:var(--amber);">⚠ '+note+'</span>' : '';
-  return bits.join(' · ') + sourceHtml + noteHtml;
+  return sentences.join(' ') + sourceHtml + noteHtml;
 }
 
 let asSearchDebounce = null;
